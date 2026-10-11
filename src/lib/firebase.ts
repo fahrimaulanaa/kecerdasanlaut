@@ -9,6 +9,17 @@ import {
   onAuthStateChanged,
   type User,
 } from "firebase/auth";
+import {
+  getFirestore,
+  type Firestore,
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  deleteDoc,
+  onSnapshot,
+} from "firebase/firestore";
 
 export interface FirebaseConfig {
   apiKey: string;
@@ -17,9 +28,20 @@ export interface FirebaseConfig {
   storageBucket: string;
   messagingSenderId: string;
   appId: string;
+  measurementId?: string;
 }
 
-export function getActiveFirebaseConfig(): FirebaseConfig | null {
+export const DEFAULT_FIREBASE_CONFIG: FirebaseConfig = {
+  apiKey: "AIzaSyAbK9WNaszGmbEd05voAeo-JRCs10ZOCFg",
+  authDomain: "kelaitanproject.firebaseapp.com",
+  projectId: "kelaitanproject",
+  storageBucket: "kelaitanproject.firebasestorage.app",
+  messagingSenderId: "259545493573",
+  appId: "1:259545493573:web:629d914c186eaa0854b32c",
+  measurementId: "G-RCN74PBNVD",
+};
+
+export function getActiveFirebaseConfig(): FirebaseConfig {
   if (typeof window !== "undefined") {
     const localConfig = localStorage.getItem("oceanai_firebase_config");
     if (localConfig) {
@@ -34,21 +56,17 @@ export function getActiveFirebaseConfig(): FirebaseConfig | null {
     }
   }
 
-  // Check process.env
   const envConfig: FirebaseConfig = {
-    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "",
-    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || "",
-    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || "",
-    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || "",
-    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || "",
-    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || "",
+    apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || DEFAULT_FIREBASE_CONFIG.apiKey,
+    authDomain: process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN || DEFAULT_FIREBASE_CONFIG.authDomain,
+    projectId: process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || DEFAULT_FIREBASE_CONFIG.projectId,
+    storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || DEFAULT_FIREBASE_CONFIG.storageBucket,
+    messagingSenderId: process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID || DEFAULT_FIREBASE_CONFIG.messagingSenderId,
+    appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID || DEFAULT_FIREBASE_CONFIG.appId,
+    measurementId: process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID || DEFAULT_FIREBASE_CONFIG.measurementId,
   };
 
-  if (envConfig.apiKey && envConfig.projectId) {
-    return envConfig;
-  }
-
-  return null;
+  return envConfig;
 }
 
 export function saveFirebaseConfig(config: FirebaseConfig) {
@@ -65,11 +83,17 @@ export function clearFirebaseConfig() {
 
 let firebaseApp: FirebaseApp | null = null;
 let firebaseAuth: Auth | null = null;
+let firestoreDb: Firestore | null = null;
 
-export function initFirebase(): { app: FirebaseApp | null; auth: Auth | null; isConfigured: boolean } {
+export function initFirebase(): {
+  app: FirebaseApp | null;
+  auth: Auth | null;
+  db: Firestore | null;
+  isConfigured: boolean;
+} {
   const config = getActiveFirebaseConfig();
-  if (!config) {
-    return { app: null, auth: null, isConfigured: false };
+  if (!config.apiKey || !config.projectId) {
+    return { app: null, auth: null, db: null, isConfigured: false };
   }
 
   try {
@@ -79,11 +103,18 @@ export function initFirebase(): { app: FirebaseApp | null; auth: Auth | null; is
       firebaseApp = getApp();
     }
     firebaseAuth = getAuth(firebaseApp);
-    return { app: firebaseApp, auth: firebaseAuth, isConfigured: true };
+    firestoreDb = getFirestore(firebaseApp);
+    return { app: firebaseApp, auth: firebaseAuth, db: firestoreDb, isConfigured: true };
   } catch (error) {
     console.warn("Firebase initialization warning:", error);
-    return { app: null, auth: null, isConfigured: false };
+    return { app: null, auth: null, db: null, isConfigured: false };
   }
+}
+
+export function getDb(): Firestore | null {
+  if (firestoreDb) return firestoreDb;
+  const { db } = initFirebase();
+  return db;
 }
 
 export {
@@ -92,5 +123,14 @@ export {
   firebaseSignOut,
   sendPasswordResetEmail,
   onAuthStateChanged,
+  getFirestore,
+  collection,
+  doc,
+  setDoc,
+  getDoc,
+  getDocs,
+  deleteDoc,
+  onSnapshot,
   type User,
+  type Firestore,
 };

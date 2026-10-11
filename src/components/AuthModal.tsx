@@ -7,7 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onOpenFirebaseConfig: () => void;
+  onOpenFirebaseConfig?: () => void;
 }
 
 export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalProps) {
@@ -98,16 +98,20 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
                 ? "● Firebase Auth Aktif"
                 : "○ Mode Pengembang / Demo Aktif"}
             </span>
-            <button
-              type="button"
-              onClick={() => {
-                onClose();
-                onOpenFirebaseConfig();
-              }}
-              className="text-amber-800 hover:text-amber-900 font-medium underline text-[11px]"
-            >
-              Pengaturan Firebase
-            </button>
+            {onOpenFirebaseConfig ? (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenFirebaseConfig();
+                }}
+                className="text-amber-800 hover:text-amber-900 font-medium underline text-[11px]"
+              >
+                Pengaturan Firebase
+              </button>
+            ) : (
+              <span className="text-[10px] text-emerald-600 font-medium">Terhubung</span>
+            )}
           </div>
 
           {error && (

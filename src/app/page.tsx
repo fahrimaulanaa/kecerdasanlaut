@@ -8,7 +8,6 @@ import {
   Check,
   X,
   Download,
-  Flame,
   LogIn,
   LogOut,
   Menu,
@@ -18,36 +17,23 @@ import {
   Brain,
   Search,
   Sparkles,
-  Cloud,
 } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
 import { LatexMarkdownRenderer } from "@/components/LatexMarkdownRenderer";
 import { OceanTopicCards } from "@/components/OceanTopicCards";
 import { AuthModal } from "@/components/AuthModal";
-import { FirebaseConfigModal } from "@/components/FirebaseConfigModal";
-import { DeploymentModal } from "@/components/DeploymentModal";
 import { useAuth } from "@/context/AuthContext";
-
-export interface ChatMessage {
-  id: string;
-  role: "user" | "assistant" | "system";
-  content: string;
-  reasoning?: string;
-  model?: string;
-  timestamp: number;
-}
-
-export interface ChatSession {
-  id: string;
-  title: string;
-  createdAt: number;
-  updatedAt: number;
-  model: string;
-  messages: ChatMessage[];
-}
+import {
+  saveSessionToFirestore,
+  deleteSessionFromFirestore,
+  loadSessionsFromFirestore,
+  subscribeSessionsFromFirestore,
+  type ChatMessage,
+  type ChatSession,
+} from "@/lib/chatStorage";
 
 export default function HomePage() {
-  const { user, signOut, isFirebaseConfigured } = useAuth();
+  const { user, signOut } = useAuth();
 
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -67,8 +53,6 @@ export default function HomePage() {
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [isFirebaseConfigOpen, setIsFirebaseConfigOpen] = useState(false);
-  const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
 
   // Refs
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -76,48 +60,102 @@ export default function HomePage() {
   const abortControllerRef = useRef<AbortController | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
 
-  // Load sessions from localStorage
+  // Load sessions from localStorage & sync from Cloud Firestore
   useEffect(() => {
-    const savedSessions = localStorage.getItem("oceanai_sessions");
     const savedModel = localStorage.getItem("oceanai_selected_model");
-
     if (savedModel) {
       setSelectedModel(savedModel);
     }
 
+    // 1. Instant local load
+    const savedSessions = localStorage.getItem("oceanai_sessions");
+    let hasLocal = false;
     if (savedSessions) {
       try {
         const parsed = JSON.parse(savedSessions);
         if (Array.isArray(parsed) && parsed.length > 0) {
           setSessions(parsed);
           setCurrentSessionId(parsed[0].id);
-          return;
+          hasLocal = true;
         }
       } catch (e) {
         console.error("Failed to parse saved sessions", e);
       }
     }
 
-    // Default initial session
-    const initialSession: ChatSession = {
-      id: "session-" + Date.now(),
-      title: "Diskusi Hidrodinamika Kelautan",
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-      model: savedModel || "qwen3.8-max",
-      messages: [],
+    // 2. Sync from Cloud Firestore collection `riwayat-chat`
+    loadSessionsFromFirestore().then((cloudSessions) => {
+      if (cloudSessions && cloudSessions.length > 0) {
+        setSessions((prev) => {
+          const sessionMap = new Map<string, ChatSession>();
+          prev.forEach((s) => sessionMap.set(s.id, s));
+          cloudSessions.forEach((s) => {
+            const existing = sessionMap.get(s.id);
+            if (!existing || (s.updatedAt || 0) >= (existing.updatedAt || 0)) {
+              sessionMap.set(s.id, s);
+            }
+          });
+          const merged = Array.from(sessionMap.values()).sort(
+            (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+          );
+          try {
+            localStorage.setItem("oceanai_sessions", JSON.stringify(merged));
+          } catch {}
+          if (merged.length > 0) {
+            setCurrentSessionId((curr) => curr || merged[0].id);
+          }
+          return merged;
+        });
+      } else if (!hasLocal) {
+        // Default initial session if no local or cloud data
+        const initialSession: ChatSession = {
+          id: "session-" + Date.now(),
+          title: "Diskusi Hidrodinamika Kelautan",
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          model: savedModel || "qwen3.8-max",
+          messages: [],
+        };
+        setSessions([initialSession]);
+        setCurrentSessionId(initialSession.id);
+        saveSessionToFirestore(initialSession, user?.uid);
+      }
+    });
+
+    // 3. Realtime listener for Firestore updates
+    const unsub = subscribeSessionsFromFirestore((cloudSessions) => {
+      if (cloudSessions && cloudSessions.length > 0 && !isStreaming) {
+        setSessions((prev) => {
+          const sessionMap = new Map<string, ChatSession>();
+          prev.forEach((s) => sessionMap.set(s.id, s));
+          cloudSessions.forEach((s) => {
+            const existing = sessionMap.get(s.id);
+            if (!existing || (s.updatedAt || 0) >= (existing.updatedAt || 0)) {
+              sessionMap.set(s.id, s);
+            }
+          });
+          return Array.from(sessionMap.values()).sort(
+            (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
+          );
+        });
+      }
+    });
+
+    return () => {
+      if (unsub) unsub();
     };
-    setSessions([initialSession]);
-    setCurrentSessionId(initialSession.id);
   }, []);
 
-  // Save sessions helper
-  const saveSessions = (updated: ChatSession[]) => {
+  // Save sessions helper (localStorage + Firestore)
+  const saveSessions = (updated: ChatSession[], sessionToSync?: ChatSession) => {
     setSessions(updated);
     try {
       localStorage.setItem("oceanai_sessions", JSON.stringify(updated));
     } catch (e) {
       console.error("Failed to persist sessions", e);
+    }
+    if (sessionToSync) {
+      saveSessionToFirestore(sessionToSync, user?.uid);
     }
   };
 
@@ -163,7 +201,7 @@ export default function HomePage() {
       messages: [],
     };
     const updated = [newSession, ...sessions];
-    saveSessions(updated);
+    saveSessions(updated, newSession);
     setCurrentSessionId(newSession.id);
     if (window.innerWidth < 768) {
       setIsSidebarOpen(false);
@@ -172,6 +210,7 @@ export default function HomePage() {
 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
+    deleteSessionFromFirestore(sessionId);
     const filtered = sessions.filter((s) => s.id !== sessionId);
     if (filtered.length === 0) {
       const fresh: ChatSession = {
@@ -182,7 +221,7 @@ export default function HomePage() {
         model: selectedModel,
         messages: [],
       };
-      saveSessions([fresh]);
+      saveSessions([fresh], fresh);
       setCurrentSessionId(fresh.id);
     } else {
       saveSessions(filtered);
@@ -205,10 +244,15 @@ export default function HomePage() {
       return;
     }
 
-    const updated = sessions.map((s) =>
-      s.id === sessionId ? { ...s, title: trimmed, updatedAt: Date.now() } : s
-    );
-    saveSessions(updated);
+    let renamedSession: ChatSession | undefined;
+    const updated = sessions.map((s) => {
+      if (s.id === sessionId) {
+        renamedSession = { ...s, title: trimmed, updatedAt: Date.now() };
+        return renamedSession;
+      }
+      return s;
+    });
+    saveSessions(updated, renamedSession);
     setEditingSessionId(null);
   };
 
@@ -239,7 +283,8 @@ export default function HomePage() {
     };
 
     saveSessions(
-      sessions.map((s) => (s.id === currentSession.id ? updatedUserSession : s))
+      sessions.map((s) => (s.id === currentSession.id ? updatedUserSession : s)),
+      updatedUserSession
     );
 
     if (!customPrompt) {
@@ -344,7 +389,8 @@ export default function HomePage() {
       };
 
       saveSessions(
-        sessions.map((s) => (s.id === currentSession.id ? finalSession : s))
+        sessions.map((s) => (s.id === currentSession.id ? finalSession : s)),
+        finalSession
       );
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortError") {
@@ -373,7 +419,8 @@ export default function HomePage() {
         };
 
         saveSessions(
-          sessions.map((s) => (s.id === currentSession.id ? errorSession : s))
+          sessions.map((s) => (s.id === currentSession.id ? errorSession : s)),
+          errorSession
         );
       }
     } finally {
@@ -560,32 +607,7 @@ export default function HomePage() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-2 border-t border-[#e8e6df] space-y-1">
-          <button
-            onClick={() => setIsFirebaseConfigOpen(true)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors cursor-pointer"
-          >
-            <div className="flex items-center gap-2">
-              <Flame
-                className={`w-3.5 h-3.5 ${
-                  isFirebaseConfigured ? "text-amber-700" : "text-stone-400"
-                }`}
-              />
-              <span>Firebase Auth</span>
-            </div>
-            <span className="text-[10px] text-stone-400">
-              {isFirebaseConfigured ? "Aktif" : "Setup"}
-            </span>
-          </button>
-
-          <button
-            onClick={() => setIsDeploymentModalOpen(true)}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors cursor-pointer"
-          >
-            <Cloud className="w-3.5 h-3.5 text-stone-500" />
-            <span>Deploy Vercel/Netlify</span>
-          </button>
-
+        <div className="p-2 border-t border-[#e8e6df] space-y-1.5">
           {/* User Profile Pill */}
           {user ? (
             <div className="flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg bg-[#eae8e1]/70 border border-[#dedbd2] text-xs">
@@ -867,17 +889,6 @@ export default function HomePage() {
       <AuthModal
         isOpen={isAuthModalOpen}
         onClose={() => setIsAuthModalOpen(false)}
-        onOpenFirebaseConfig={() => setIsFirebaseConfigOpen(true)}
-      />
-
-      <FirebaseConfigModal
-        isOpen={isFirebaseConfigOpen}
-        onClose={() => setIsFirebaseConfigOpen(false)}
-      />
-
-      <DeploymentModal
-        isOpen={isDeploymentModalOpen}
-        onClose={() => setIsDeploymentModalOpen(false)}
       />
     </div>
   );

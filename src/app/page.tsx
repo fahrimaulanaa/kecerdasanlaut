@@ -7,19 +7,15 @@ import {
   Edit2,
   Check,
   X,
-  Share2,
   Download,
   Flame,
   LogIn,
   LogOut,
-  User as UserIcon,
   Menu,
   ArrowUp,
   StopCircle,
   Copy,
-  ChevronDown,
   Brain,
-  MessageSquare,
   Search,
   Sparkles,
   Cloud,
@@ -59,6 +55,8 @@ export default function HomePage() {
   const [selectedModel, setSelectedModel] = useState<string>("qwen3.8-max");
   const [input, setInput] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
+  const [streamingContent, setStreamingContent] = useState<string>("");
+  const [streamingReasoning, setStreamingReasoning] = useState<string>("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -73,7 +71,7 @@ export default function HomePage() {
   const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
 
   // Refs
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
@@ -126,10 +124,21 @@ export default function HomePage() {
   const currentSession =
     sessions.find((s) => s.id === currentSessionId) || sessions[0] || null;
 
-  // Auto-scroll to bottom of chat
+  // Ultra-smooth instant scroll during streaming (prevents animation fight & jitter)
+  const scrollToBottom = (instant = false) => {
+    if (chatScrollContainerRef.current) {
+      const container = chatScrollContainerRef.current;
+      if (instant) {
+        container.scrollTop = container.scrollHeight;
+      } else {
+        container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
+      }
+    }
+  };
+
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [currentSession?.messages, isStreaming]);
+    scrollToBottom(true);
+  }, [currentSession?.messages?.length, isStreaming]);
 
   // Focus rename input when editing starts
   useEffect(() => {
@@ -221,29 +230,17 @@ export default function HomePage() {
       ? promptToSend.slice(0, 36) + (promptToSend.length > 36 ? "..." : "")
       : currentSession.title;
 
-    const assistantPlaceholderId = "msg-assistant-" + Date.now();
-    const assistantMessage: ChatMessage = {
-      id: assistantPlaceholderId,
-      role: "assistant",
-      content: "",
-      reasoning: "",
-      model: selectedModel,
-      timestamp: Date.now(),
-    };
-
-    const newMessages = [...currentSession.messages, userMessage, assistantMessage];
-
-    const updatedSession: ChatSession = {
+    // Immediately push user message to UI
+    const updatedUserSession: ChatSession = {
       ...currentSession,
       title: newTitle,
       updatedAt: Date.now(),
-      messages: newMessages,
+      messages: [...currentSession.messages, userMessage],
     };
 
-    const nextSessions = sessions.map((s) =>
-      s.id === currentSession.id ? updatedSession : s
+    saveSessions(
+      sessions.map((s) => (s.id === currentSession.id ? updatedUserSession : s))
     );
-    saveSessions(nextSessions);
 
     if (!customPrompt) {
       setInput("");
@@ -251,15 +248,20 @@ export default function HomePage() {
         textareaRef.current.style.height = "auto";
       }
     }
+
+    // Set streaming state
     setIsStreaming(true);
+    setStreamingContent("");
+    setStreamingReasoning("");
 
     try {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      const contextMessages = newMessages
-        .slice(0, -1)
-        .map((m) => ({ role: m.role, content: m.content }));
+      const contextMessages = updatedUserSession.messages.map((m) => ({
+        role: m.role,
+        content: m.content,
+      }));
 
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -310,80 +312,76 @@ export default function HomePage() {
             if (delta) {
               if (delta.content) {
                 fullContent += delta.content;
+                setStreamingContent(fullContent);
               }
               if (delta.reasoning) {
                 fullReasoning += delta.reasoning;
+                setStreamingReasoning(fullReasoning);
               }
-
-              setSessions((prev) =>
-                prev.map((s) => {
-                  if (s.id !== currentSession.id) return s;
-                  return {
-                    ...s,
-                    messages: s.messages.map((m) =>
-                      m.id === assistantPlaceholderId
-                        ? { ...m, content: fullContent, reasoning: fullReasoning }
-                        : m
-                    ),
-                  };
-                })
-              );
+              // Instant scroll during active writing
+              scrollToBottom(true);
             }
           } catch {
-            // Partial chunk
+            // Partial JSON
           }
         }
       }
 
-      setSessions((prev) => {
-        const updated = prev.map((s) => {
-          if (s.id !== currentSession.id) return s;
-          return {
-            ...s,
-            messages: s.messages.map((m) =>
-              m.id === assistantPlaceholderId
-                ? { ...m, content: fullContent, reasoning: fullReasoning }
-                : m
-            ),
-          };
-        });
-        localStorage.setItem("oceanai_sessions", JSON.stringify(updated));
-        return updated;
-      });
+      // Commit final assistant message to session
+      const assistantMessage: ChatMessage = {
+        id: "msg-assistant-" + Date.now(),
+        role: "assistant",
+        content: fullContent,
+        reasoning: fullReasoning,
+        model: selectedModel,
+        timestamp: Date.now(),
+      };
+
+      const finalSession: ChatSession = {
+        ...updatedUserSession,
+        updatedAt: Date.now(),
+        messages: [...updatedUserSession.messages, assistantMessage],
+      };
+
+      saveSessions(
+        sessions.map((s) => (s.id === currentSession.id ? finalSession : s))
+      );
     } catch (err: unknown) {
-      if ((err as Error)?.name === "AbortController") {
-        // user aborted
+      if ((err as Error)?.name === "AbortError") {
+        // User stopped generation manually
       } else {
         const errorMessage =
           err instanceof Error
             ? err.message
             : "Terjadi kesalahan saat berkomunikasi dengan endpoint AI.";
 
-        setSessions((prev) => {
-          const updated = prev.map((s) => {
-            if (s.id !== currentSession.id) return s;
-            return {
-              ...s,
-              messages: s.messages.map((m) =>
-                m.id === assistantPlaceholderId
-                  ? {
-                      ...m,
-                      content:
-                        "⚠️ **Kendala Komunikasi Endpoint AI**:\n\n" +
-                        errorMessage +
-                        "\n\n*Silakan periksa kembali kuota atau koneksi ke Mecutinai.com.*",
-                    }
-                  : m
-              ),
-            };
-          });
-          localStorage.setItem("oceanai_sessions", JSON.stringify(updated));
-          return updated;
-        });
+        const errAssistantMessage: ChatMessage = {
+          id: "msg-assistant-" + Date.now(),
+          role: "assistant",
+          content:
+            "⚠️ **Kendala Komunikasi Endpoint AI**:\n\n" +
+            errorMessage +
+            "\n\n*Silakan periksa kembali kuota atau koneksi ke Mecutinai.com.*",
+          model: selectedModel,
+          timestamp: Date.now(),
+        };
+
+        const errorSession: ChatSession = {
+          ...updatedUserSession,
+          updatedAt: Date.now(),
+          messages: [...updatedUserSession.messages, errAssistantMessage],
+        };
+
+        saveSessions(
+          sessions.map((s) => (s.id === currentSession.id ? errorSession : s))
+        );
       }
     } finally {
       setIsStreaming(false);
+      setStreamingContent("");
+      setStreamingReasoning("");
       abortControllerRef.current = null;
+      scrollToBottom(false);
     }
   };
 
@@ -426,7 +424,6 @@ export default function HomePage() {
     URL.revokeObjectURL(url);
   };
 
-  // Filter sessions by search query
   const filteredSessions = sessions.filter((s) =>
     s.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -452,17 +449,17 @@ export default function HomePage() {
             </div>
             <button
               onClick={() => setIsSidebarOpen(false)}
-              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-md hover:bg-[#eae8e1] transition-colors"
+              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-md hover:bg-[#eae8e1] transition-colors md:hidden"
               title="Tutup sidebar"
             >
-              <X className="w-4 h-4 md:hidden" />
+              <X className="w-4 h-4" />
             </button>
           </div>
 
-          {/* New Chat Button Claude Style */}
+          {/* New Chat Button */}
           <button
             onClick={handleCreateNewChat}
-            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-[#e8e6df] text-xs font-medium text-stone-800 hover:bg-[#faf9f7] hover:border-[#dedbd2] shadow-xs transition-colors"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-[#e8e6df] text-xs font-medium text-stone-800 hover:bg-[#faf9f7] hover:border-[#dedbd2] shadow-xs transition-colors cursor-pointer"
           >
             <Plus className="w-4 h-4 text-stone-500" />
             <span>Percakapan Baru</span>
@@ -562,11 +559,11 @@ export default function HomePage() {
           })}
         </div>
 
-        {/* Sidebar Footer Claude Style (User profile & Settings) */}
+        {/* Sidebar Footer */}
         <div className="p-2 border-t border-[#e8e6df] space-y-1">
           <button
             onClick={() => setIsFirebaseConfigOpen(true)}
-            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors"
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors cursor-pointer"
           >
             <div className="flex items-center gap-2">
               <Flame
@@ -583,13 +580,13 @@ export default function HomePage() {
 
           <button
             onClick={() => setIsDeploymentModalOpen(true)}
-            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors"
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors cursor-pointer"
           >
             <Cloud className="w-3.5 h-3.5 text-stone-500" />
             <span>Deploy Vercel/Netlify</span>
           </button>
 
-          {/* User Profile Pill Claude Style */}
+          {/* User Profile Pill */}
           {user ? (
             <div className="flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg bg-[#eae8e1]/70 border border-[#dedbd2] text-xs">
               <div className="flex items-center gap-2 min-w-0">
@@ -607,7 +604,7 @@ export default function HomePage() {
               </div>
               <button
                 onClick={() => signOut()}
-                className="p-1 text-stone-400 hover:text-stone-700 rounded"
+                className="p-1 text-stone-400 hover:text-stone-700 rounded cursor-pointer"
                 title="Keluar"
               >
                 <LogOut className="w-3.5 h-3.5" />
@@ -616,7 +613,7 @@ export default function HomePage() {
           ) : (
             <button
               onClick={() => setIsAuthModalOpen(true)}
-              className="w-full flex items-center justify-center gap-2 px-3 py-2 mt-1 rounded-lg bg-stone-800 text-white text-xs font-medium hover:bg-stone-900 transition-colors"
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 mt-1 rounded-lg bg-stone-800 text-white text-xs font-medium hover:bg-stone-900 transition-colors cursor-pointer"
             >
               <LogIn className="w-3.5 h-3.5" />
               <span>Masuk / Daftar</span>
@@ -627,13 +624,13 @@ export default function HomePage() {
 
       {/* Main Chat Canvas */}
       <div className="flex-1 flex flex-col min-w-0 h-screen">
-        {/* Top Header - Claude Style */}
+        {/* Top Header */}
         <header className="h-12 border-b border-[#e8e6df] bg-[#faf9f5] flex items-center justify-between px-4 shrink-0 z-10">
           <div className="flex items-center gap-2.5 min-w-0">
             {!isSidebarOpen && (
               <button
                 onClick={() => setIsSidebarOpen(true)}
-                className="p-1.5 text-stone-500 hover:text-stone-800 rounded-md hover:bg-[#eae8e1] transition-colors"
+                className="p-1.5 text-stone-500 hover:text-stone-800 rounded-md hover:bg-[#eae8e1] transition-colors cursor-pointer"
                 title="Buka sidebar"
               >
                 <Menu className="w-4 h-4" />
@@ -662,7 +659,11 @@ export default function HomePage() {
                 </button>
               </div>
             ) : (
-              <div className="flex items-center gap-1.5 group cursor-pointer" onClick={() => currentSession && startRenameSession(currentSession)}>
+              <div
+                className="flex items-center gap-1.5 group cursor-pointer"
+                onClick={() => currentSession && startRenameSession(currentSession)}
+                title="Klik untuk ganti nama percakapan"
+              >
                 <h2 className="text-sm font-semibold text-stone-800 truncate max-w-sm sm:max-w-md">
                   {currentSession?.title || "Percakapan Baru"}
                 </h2>
@@ -671,18 +672,12 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Right Header: Model Selector & Export */}
+          {/* Right Header: Export Action */}
           <div className="flex items-center gap-2">
-            <ModelSelector
-              selectedModel={selectedModel}
-              onSelectModel={handleSelectModel}
-              direction="down"
-            />
-
             <button
               onClick={handleExportMarkdown}
               disabled={!currentSession || currentSession.messages.length === 0}
-              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-md hover:bg-[#eae8e1] transition-colors disabled:opacity-40"
+              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-md hover:bg-[#eae8e1] transition-colors disabled:opacity-30 cursor-pointer"
               title="Ekspor ke Markdown"
             >
               <Download className="w-4 h-4" />
@@ -691,8 +686,11 @@ export default function HomePage() {
         </header>
 
         {/* Message Stream */}
-        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
-          {(!currentSession || currentSession.messages.length === 0) ? (
+        <div
+          ref={chatScrollContainerRef}
+          className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6"
+        >
+          {(!currentSession || (currentSession.messages.length === 0 && !isStreaming)) ? (
             <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-2xl mx-auto text-center py-12">
               <div className="w-12 h-12 rounded-2xl bg-[#f0eee6] border border-[#e8e6df] flex items-center justify-center mb-4 text-[#c2613a]">
                 <Sparkles className="w-6 h-6" />
@@ -701,7 +699,7 @@ export default function HomePage() {
                 OceanAI untuk Teknik Kelautan
               </h2>
               <p className="text-sm text-stone-600 max-w-md mb-8 leading-relaxed">
-                Asisten komprehensif untuk menurunkan formula gelombang laut, beban hidrodinamika, stabilitas kapal, dan komputasi numerik.
+                Asisten cerdas untuk menurunkan formula gelombang laut, analisis beban hidrodinamika, stabilitas apung kapal, dan komputasi numerik.
               </p>
 
               {/* Minimal Clean Prompts */}
@@ -711,6 +709,7 @@ export default function HomePage() {
             </div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-6 pb-4">
+              {/* Historical Messages */}
               {currentSession.messages.map((message) => {
                 const isUser = message.role === "user";
 
@@ -725,14 +724,14 @@ export default function HomePage() {
                         <div className="whitespace-pre-wrap">{message.content}</div>
                       </div>
                     ) : (
-                      /* Assistant message Claude Style - no loud border, sits directly on page */
+                      /* Assistant message Claude Style */
                       <div className="w-full text-sm leading-relaxed text-[#2d2b28]">
                         {/* Thinking / Reasoning collapsible */}
                         {message.reasoning && (
                           <details className="mb-3 rounded-lg bg-[#f7f5ef] border border-[#e8e6df] text-xs">
                             <summary className="px-3 py-2 text-stone-600 cursor-pointer font-medium flex items-center gap-1.5 hover:text-stone-900 select-none">
                               <Brain className="w-3.5 h-3.5 text-[#c2613a]" />
-                              <span>Lihat proses penurunan matematis & penalaran...</span>
+                              <span>Lihat proses penalaran & penurunan formula...</span>
                             </summary>
                             <div className="p-3 text-stone-600 border-t border-[#e8e6df] text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
                               {message.reasoning}
@@ -740,26 +739,15 @@ export default function HomePage() {
                           </details>
                         )}
 
-                        {/* Content rendered with KaTeX */}
-                        <div>
-                          {message.content ? (
-                            <LatexMarkdownRenderer content={message.content} />
-                          ) : (
-                            <div className="flex items-center gap-2 text-stone-500 py-2">
-                              <span className="inline-block w-2 h-2 rounded-full bg-[#c2613a] animate-ping" />
-                              <span className="text-xs italic">
-                                Menyusun analisis & formula kelautan...
-                              </span>
-                            </div>
-                          )}
-                        </div>
+                        {/* Content rendered with High-Contrast KaTeX */}
+                        <LatexMarkdownRenderer content={message.content} />
 
                         {/* Minimal message footer action */}
                         {message.content && (
                           <div className="flex items-center gap-2 mt-2 pt-1 text-xs text-stone-400">
                             <button
                               onClick={() => handleCopyMessage(message.id, message.content)}
-                              className="p-1 hover:text-stone-700 transition-colors"
+                              className="p-1 hover:text-stone-700 transition-colors cursor-pointer"
                               title="Salin respon"
                             >
                               {copiedId === message.id ? (
@@ -768,7 +756,7 @@ export default function HomePage() {
                                 <Copy className="w-3.5 h-3.5" />
                               )}
                             </button>
-                            <span className="text-[11px] font-mono">
+                            <span className="text-[11px] font-mono text-stone-400">
                               {message.model || selectedModel}
                             </span>
                           </div>
@@ -778,7 +766,39 @@ export default function HomePage() {
                   </div>
                 );
               })}
-              <div ref={messagesEndRef} />
+
+              {/* Active Streaming Message (Smooth, no flickering) */}
+              {isStreaming && (
+                <div className="flex justify-start w-full text-sm leading-relaxed text-[#2d2b28]">
+                  <div className="w-full">
+                    {streamingReasoning && (
+                      <details className="mb-3 rounded-lg bg-[#f7f5ef] border border-[#e8e6df] text-xs" open>
+                        <summary className="px-3 py-2 text-stone-600 cursor-pointer font-medium flex items-center gap-1.5 select-none">
+                          <Brain className="w-3.5 h-3.5 text-[#c2613a] animate-pulse" />
+                          <span>Sedang memproses penalaran matematika...</span>
+                        </summary>
+                        <div className="p-3 text-stone-600 border-t border-[#e8e6df] text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                          {streamingReasoning}
+                        </div>
+                      </details>
+                    )}
+
+                    {streamingContent ? (
+                      <div>
+                        <LatexMarkdownRenderer content={streamingContent} />
+                        <span className="inline-block w-1.5 h-4 ml-1 bg-[#c2613a] animate-pulse align-middle" />
+                      </div>
+                    ) : (
+                      <div className="flex items-center gap-2 text-stone-500 py-2">
+                        <span className="inline-block w-2 h-2 rounded-full bg-[#c2613a] animate-ping" />
+                        <span className="text-xs italic">
+                          Menurunkan formula & menganalisis teori kelautan...
+                        </span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -809,6 +829,7 @@ export default function HomePage() {
                 </span>
 
                 <div className="flex items-center gap-2">
+                  {/* Single Model Selector with Logos */}
                   <ModelSelector
                     selectedModel={selectedModel}
                     onSelectModel={handleSelectModel}
@@ -819,8 +840,8 @@ export default function HomePage() {
                     <button
                       type="button"
                       onClick={handleStopStreaming}
-                      className="w-7 h-7 rounded-full bg-stone-800 text-white flex items-center justify-center hover:bg-stone-900 transition-colors shrink-0"
-                      title="Hentikan"
+                      className="w-7 h-7 rounded-full bg-stone-800 text-white flex items-center justify-center hover:bg-stone-900 transition-colors shrink-0 cursor-pointer"
+                      title="Hentikan respons"
                     >
                       <StopCircle className="w-3.5 h-3.5" />
                     </button>
@@ -829,7 +850,7 @@ export default function HomePage() {
                       type="button"
                       disabled={!input.trim()}
                       onClick={() => handleSendMessage()}
-                      className="w-7 h-7 rounded-full bg-[#c2613a] text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#b0532f] transition-colors shrink-0"
+                      className="w-7 h-7 rounded-full bg-[#c2613a] text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#b0532f] transition-colors shrink-0 cursor-pointer"
                       title="Kirim (Enter)"
                     >
                       <ArrowUp className="w-4 h-4" />

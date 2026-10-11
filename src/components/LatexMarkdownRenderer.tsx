@@ -12,7 +12,10 @@ interface LatexMarkdownRendererProps {
   content: string;
 }
 
-// Comprehensive LaTeX preprocessor to catch raw and untranslated formulas
+/**
+ * Normalizes and converts raw LaTeX formulas into standard KaTeX markdown.
+ * Handles display math, inline math, bare equation lines, and standalone Greek letters.
+ */
 export function normalizeLatex(rawText: string): string {
   if (!rawText) return "";
 
@@ -24,17 +27,50 @@ export function normalizeLatex(rawText: string): string {
   // 2. Convert inline math \( ... \) to $ ... $
   text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math.trim()}$`);
 
-  // 3. Convert parenthesized LaTeX symbols like (\rho), (\omega), (\nabla), (\eta) to ($\rho$), ($\omega$), etc.
-  const commonGreek = "alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|nabla|partial|infty|sum|int|prod";
-  
-  // Replace (\rho) or ( \rho ) with ($\rho$)
-  text = text.replace(new RegExp(`\\(\\s*\\\\(${commonGreek})\\s*\\)`, "g"), "($\\$1$)");
+  // 3. Convert bare equation lines without $ into display math $$ ... $$
+  // If a line contains TeX operators like \frac, \nabla, \partial, \sum, \int, \tanh, \sqrt, \dot, \ddot
+  // and does NOT already contain '$' or backticks
+  const lines = text.split("\n");
+  const processedLines = lines.map((line) => {
+    const trimmed = line.trim();
+    if (!trimmed) return line;
 
-  // 4. Wrap standalone TeX macros that are preceded by space or punctuation and not already inside $ or backticks
-  // Match macros like \rho, \omega, \nabla when not preceded by $ or \
-  text = text.replace(new RegExp(`(?<=[\\s,;:(]|^)\\\\(${commonGreek})(?=[\\s,;:.?!)]|$)`, "g"), "$\\$1$");
+    // Skip if already wrapped in $ or code fence
+    if (trimmed.startsWith("$$") || trimmed.startsWith("```") || trimmed.startsWith("|")) {
+      return line;
+    }
 
-  // 5. Fix common case where display math $$ has no space around it
+    // Check if line contains TeX math commands and is an equation line
+    const hasMathCommand = /\\(frac|nabla|partial|int|sum|prod|tanh|sqrt|dot|ddot|vec|mathbf|boldsymbol|ll|gg|approx|equiv|le|ge|pm|times|cdot|implies|iff)\b/.test(
+      trimmed
+    );
+    const hasEqualsOrRel = /(=|<|>|\+|-|\/|\\approx|\\implies)/.test(trimmed);
+
+    if (hasMathCommand && hasEqualsOrRel && !trimmed.includes("$")) {
+      // Clean any accidental markdown heading prefix if present inside equation
+      return `$$\n${trimmed}\n$$`;
+    }
+
+    return line;
+  });
+  text = processedLines.join("\n");
+
+  // 4. Wrap standalone inline math expressions like \phi(x,z,t), (a/L \ll 1), z = -h, (\rho), (\omega)
+  // First, handle parenthesized expressions containing TeX symbols: e.g. (\rho) or (a/L \ll 1) or (\phi)
+  text = text.replace(/\(([^)$\n]*\\[a-zA-Z]+[^)$\n]*)\)/g, (match, inner) => {
+    // If not already inside math delimiters
+    if (inner.includes("$")) return match;
+    return `($${inner.trim()}$)`;
+  });
+
+  // Next, wrap standalone Greek letters or symbols like \rho, \omega, \eta, \lambda, \phi, \zeta
+  // that have word boundaries and are not already inside $ or backticks
+  const greekLetters = "alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega";
+  text = text.replace(new RegExp(`(?<=[\\s,;:(]|^)\\\\(${greekLetters})(?=[\\s,;:.?!)]|$)`, "g"), (match) => {
+    return `$${match}$`;
+  });
+
+  // 5. Ensure display math $$ has proper newline spacing
   text = text.replace(/([^\n])\$\$([\s\S]*?)\$\$([^\n])/g, "$1\n\n$$$2$$\n\n$3");
 
   return text;
@@ -83,7 +119,7 @@ function CodeBlock({
           ) : (
             <>
               <Copy className="w-3.5 h-3.5" />
-              <span>Salin kode</span>
+              <span>Salin</span>
             </>
           )}
         </button>
@@ -104,7 +140,17 @@ export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
     <div className="claude-markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm]}
-        rehypePlugins={[[rehypeKatex, { output: "htmlAndMathml", strict: false }]]}
+        rehypePlugins={[
+          [
+            rehypeKatex,
+            {
+              output: "htmlAndMathml",
+              strict: false,
+              throwOnError: false,
+              errorColor: "#2d2b28",
+            },
+          ],
+        ]}
         components={{
           code: CodeBlock as unknown as React.FC<React.ComponentPropsWithoutRef<"code">>,
           table: ({ children, ...props }) => (

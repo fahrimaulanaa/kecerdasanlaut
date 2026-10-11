@@ -170,21 +170,44 @@ body {
   font-weight: 600;
 }
 
-/* KaTeX Clean Display */
+/* KaTeX High Contrast & Clean Display */
 .katex-display {
   margin: 1.25rem 0 !important;
-  padding: 0.875rem 1.25rem !important;
-  background: #fbfaf7 !important;
+  padding: 1rem 1.25rem !important;
+  background: #ffffff !important;
   border-radius: 0.75rem !important;
-  border: 1px solid #e8e5dc !important;
+  border: 1px solid #e2dfd7 !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03) !important;
   overflow-x: auto !important;
   overflow-y: hidden !important;
   max-width: 100% !important;
 }
 
+.katex,
+.katex * {
+  color: #111827 !important;
+}
+
 .katex {
-  font-size: 1.08em !important;
-  color: #1a1917 !important;
+  font-size: 1.12em !important;
+}
+
+.katex .mord,
+.katex .minner,
+.katex .mbin,
+.katex .mrel,
+.katex .mopen,
+.katex .mclose,
+.katex .mpunct,
+.katex .mop {
+  color: #111827 !important;
+}
+
+.katex-error {
+  color: #991b1b !important;
+  background: #fee2e2 !important;
+  padding: 0.1rem 0.3rem !important;
+  border-radius: 0.25rem !important;
 }
 
 /* Code container Claude Style */

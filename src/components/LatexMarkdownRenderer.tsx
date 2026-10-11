@@ -92,6 +92,82 @@ export async function copyLatexAsEquation(text: string): Promise<void> {
   await navigator.clipboard.writeText(text);
 }
 
+type HastNode = {
+  type: string;
+  value?: string;
+  tagName?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+};
+
+function getLatexAnnotation(node: HastNode): string | null {
+  if (node.tagName === "annotation") {
+    const encoding = node.properties?.encoding;
+    if (encoding === "application/x-tex") {
+      return node.children
+        ?.filter((child) => child.type === "text")
+        .map((child) => String(child.value || ""))
+        .join("") || null;
+    }
+  }
+
+  for (const child of node.children || []) {
+    const latex = getLatexAnnotation(child);
+    if (latex) return latex;
+  }
+  return null;
+}
+
+function rehypeEquationCopyButtons() {
+  return (tree: HastNode) => {
+    const visit = (node: HastNode, parent?: HastNode) => {
+      const className = node.properties?.className;
+      const isKatexDisplay =
+        (Array.isArray(className) && className.includes("katex-display")) ||
+        className === "katex-display";
+      if (
+        node.type === "element" &&
+        node.tagName === "span" &&
+        isKatexDisplay
+      ) {
+        const latex = getLatexAnnotation(node);
+        if (latex && parent?.children) {
+          const index = parent.children.indexOf(node);
+          parent.children[index] = {
+            type: "element",
+            tagName: "div",
+            properties: { className: ["latex-equation-box"] },
+            children: [
+              node,
+              {
+                type: "element",
+                tagName: "button",
+                properties: {
+                  type: "button",
+                  className: ["latex-equation-copy-btn"],
+                  "data-latex": latex,
+                  title: "Salin LaTeX sebagai equation",
+                  "aria-label": "Salin LaTeX sebagai equation",
+                },
+                children: [
+                  {
+                    type: "text",
+                    value: "Salin LaTeX",
+                  },
+                ],
+              },
+            ],
+          };
+          return;
+        }
+      }
+
+      for (const child of node.children || []) visit(child, node);
+    };
+    visit(tree);
+  };
+}
+
 function CodeBlock({
   className,
   children,
@@ -146,10 +222,28 @@ function CodeBlock({
 }
 
 export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
+  const [copiedLatex, setCopiedLatex] = useState<string | null>(null);
   const normalized = normalizeLatex(content);
 
   return (
-    <div className="claude-markdown-body">
+    <div
+      className="claude-markdown-body"
+      onClick={async (event) => {
+        const target = event.target as HTMLElement;
+        const button = target.closest<HTMLButtonElement>("[data-latex]");
+        if (!button) return;
+        event.preventDefault();
+        const latex = button.dataset.latex;
+        if (!latex) return;
+        try {
+          await copyLatexAsEquation(latex);
+          setCopiedLatex(latex);
+          window.setTimeout(() => setCopiedLatex(null), 2000);
+        } catch (error) {
+          console.error("Gagal menyalin equation:", error);
+        }
+      }}
+    >
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm]}
         rehypePlugins={[
@@ -162,6 +256,7 @@ export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
               errorColor: "#991b1b",
             },
           ],
+          rehypeEquationCopyButtons,
         ]}
         components={{
           code: CodeBlock as unknown as React.FC<React.ComponentPropsWithoutRef<"code">>,
@@ -181,6 +276,11 @@ export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
       >
         {normalized}
       </ReactMarkdown>
+      {copiedLatex && (
+        <span className="sr-only" role="status">
+          LaTeX berhasil disalin sebagai equation
+        </span>
+      )}
     </div>
   );
 }

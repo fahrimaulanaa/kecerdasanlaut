@@ -256,6 +256,38 @@ body {
   background: rgba(0, 0, 0, 0.05);
 }
 
+.latex-equation-box {
+  position: relative;
+  padding: 0.75rem 3.5rem 0.75rem 0.75rem;
+  border: 1px solid #e8e6df;
+  border-radius: 0.75rem;
+  background: #fff;
+}
+
+.latex-equation-box .katex-display {
+  margin: 0;
+}
+
+.latex-equation-copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  border: 1px solid #e8e6df;
+  border-radius: 0.375rem;
+  padding: 0.25rem 0.5rem;
+  color: #78716c;
+  background: #faf9f5;
+  font-size: 0.6875rem;
+  line-height: 1rem;
+  cursor: pointer;
+  transition: color 150ms ease, background 150ms ease;
+}
+
+.latex-equation-copy-btn:hover {
+  color: #c2613a;
+  background: #f4f2ec;
+}
+
 .claude-code-pre {
   padding: 0.875rem 1rem;
   overflow-x: auto;

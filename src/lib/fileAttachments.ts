@@ -16,6 +16,7 @@ export const MAX_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_EXTRACTED_CHARS = 80_000;
 
 export const ACCEPT_FILE_TYPES = [
+  ".pdf",
   ".doc",
   ".docx",
   ".txt",
@@ -96,6 +97,10 @@ export function isTextFile(file: File): boolean {
   return TEXT_EXTENSIONS.has(fileExtension(file.name));
 }
 
+export function isPdfFile(file: File): boolean {
+  return file.type === "application/pdf" || fileExtension(file.name) === "pdf";
+}
+
 export function needsServerParse(file: File): boolean {
   const ext = fileExtension(file.name);
   return (
@@ -103,7 +108,8 @@ export function needsServerParse(file: File): boolean {
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     ext === "docx" ||
     file.type === "application/msword" ||
-    ext === "doc"
+    ext === "doc" ||
+    isPdfFile(file)
   );
 }
 
@@ -235,7 +241,7 @@ export async function readLocalFile(file: File): Promise<ChatAttachment> {
   }
 
   throw new Error(
-    `${file.name} tidak didukung. Unggah DOCX, gambar, atau berkas teks.`
+    `${file.name} tidak didukung. Unggah PDF, DOCX, gambar, atau berkas teks.`
   );
 }
 

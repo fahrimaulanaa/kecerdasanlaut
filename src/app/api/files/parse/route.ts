@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
+import { extractText, getDocumentProxy } from "unpdf";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
 
 export async function POST(request: Request) {
@@ -22,16 +23,22 @@ export async function POST(request: Request) {
     }
 
     const ext = file.name.toLowerCase().split(".").pop() || "";
-    if (ext === "pdf" || file.type === "application/pdf") {
-      return NextResponse.json(
-        { error: "Format PDF tidak didukung." },
-        { status: 415 }
-      );
-    }
     const buffer = Buffer.from(await file.arrayBuffer());
     let extractedText = "";
 
-    if (ext === "doc") {
+    if (ext === "pdf" || file.type === "application/pdf") {
+      try {
+        const pdf = await getDocumentProxy(new Uint8Array(buffer));
+        const { text } = await extractText(pdf, { mergePages: true });
+        extractedText = text || "";
+      } catch (error) {
+        console.error("PDF parse error:", error);
+        return NextResponse.json(
+          { error: `Gagal membaca isi PDF ${file.name}. Pastikan file valid.` },
+          { status: 422 }
+        );
+      }
+    } else if (ext === "doc") {
       return NextResponse.json(
         {
           error:

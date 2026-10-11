@@ -803,10 +803,10 @@ export default function HomePage() {
                 <Sparkles className="w-6 h-6" />
               </div>
               <h2 className="text-2xl font-serif font-bold text-[#1f1e1d] tracking-tight mb-2">
-                OceanAI untuk Teknik Kelautan
+                Jalesveva Jayamahe
               </h2>
               <p className="text-sm text-stone-600 max-w-md mb-8 leading-relaxed">
-                Asisten cerdas untuk menurunkan formula gelombang laut, analisis beban hidrodinamika, stabilitas apung kapal, dan komputasi numerik.
+                Justru di Laut Kita Jaya
               </p>
 
               {/* Minimal Clean Prompts */}

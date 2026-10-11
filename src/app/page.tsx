@@ -19,7 +19,6 @@ import {
   Sparkles,
   Paperclip,
   FileText,
-  FileDown,
   Image as ImageIcon,
   Loader2,
 } from "lucide-react";
@@ -39,7 +38,6 @@ import {
 import {
   ACCEPT_FILE_TYPES,
   MAX_ATTACHMENTS,
-  attachmentFromPdfBlob,
   buildUserVisibleContent,
   formatFileSize,
   readLocalFile,
@@ -47,11 +45,6 @@ import {
   toApiMessageContent,
   type ChatAttachment,
 } from "@/lib/fileAttachments";
-import {
-  downloadBlob,
-  renderSolutionPdf,
-} from "@/lib/pdfExportClient";
-import { latexFileName } from "@/lib/latexDocument";
 
 export default function HomePage() {
   const { user, signOut } = useAuth();
@@ -85,11 +78,6 @@ export default function HomePage() {
   const [isReadingFiles, setIsReadingFiles] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-
-  // PDF export state
-  const [exportingMessageId, setExportingMessageId] = useState<string | null>(null);
-  const [isExportingSession, setIsExportingSession] = useState(false);
-  const [exportNotice, setExportNotice] = useState<string | null>(null);
 
   // Load sessions from localStorage & sync from Cloud Firestore
   useEffect(() => {
@@ -560,129 +548,6 @@ export default function HomePage() {
     URL.revokeObjectURL(url);
   };
 
-  /**
-   * Generate a PDF for a solution (single message or the whole session), then
-   * attach it to the current conversation.
-   */
-  const handleGeneratePdf = async (options?: {
-    messageId?: string;
-    attach?: boolean;
-  }) => {
-    if (!currentSession || currentSession.messages.length === 0) return;
-
-    const targetMessage = options?.messageId
-      ? currentSession.messages.find((m) => m.id === options.messageId)
-      : undefined;
-
-    // Build the message set: a single solution pair, or the whole session.
-    const exportMessages: ChatMessage[] = targetMessage
-      ? [
-          // Include the preceding user question for context when exporting one solution.
-          ...currentSession.messages
-            .slice(
-              0,
-              currentSession.messages.findIndex((m) => m.id === targetMessage.id)
-            )
-            .filter((m) => m.role === "user")
-            .slice(-1),
-          targetMessage,
-        ]
-      : currentSession.messages;
-
-    const title =
-      (targetMessage
-        ? currentSession.title + " - Solusi"
-        : currentSession.title) || "Solusi Teknik Kelautan";
-
-    setExportNotice(null);
-    if (targetMessage) {
-      setExportingMessageId(targetMessage.id);
-    } else {
-      setIsExportingSession(true);
-    }
-
-    try {
-      let blob: Blob | null = null;
-      const fileName = `${latexFileName(title)}.pdf`;
-      let usedLatex = false;
-
-      // 1) Prefer a server-compiled PDF when a LaTeX engine is available.
-      try {
-        const res = await fetch("/api/export/pdf", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            messages: exportMessages,
-            title,
-            model: targetMessage?.model || currentSession.model || selectedModel,
-            includeReasoning: false,
-            includeUserMessages: true,
-            compile: true,
-          }),
-        });
-
-        if (res.ok && res.headers.get("content-type")?.includes("application/pdf")) {
-          blob = await res.blob();
-          usedLatex = true;
-        }
-      } catch {
-        // Network error -> fall back to client rendering.
-      }
-
-      // 2) Fallback: render a PDF entirely on the client (pdf-lib).
-      if (!blob) {
-        blob = await renderSolutionPdf(exportMessages, {
-          title,
-          model: targetMessage?.model || currentSession.model || selectedModel,
-          includeReasoning: false,
-          includeUserMessages: true,
-        });
-      }
-
-      // 3) Download the PDF.
-      downloadBlob(blob, fileName);
-
-      // 4) Attach the PDF into the conversation so it becomes part of the chat.
-      if (options?.attach) {
-        const attachment = await attachmentFromPdfBlob(blob, fileName);
-        const exportMessage: ChatMessage = {
-          id: "msg-export-" + Date.now(),
-          role: "user",
-          content: "Berkas PDF solusi telah dibuat. Tolong baca dan verifikasi isinya.",
-          timestamp: Date.now(),
-          attachments: [attachment],
-        };
-        const updatedSession: ChatSession = {
-          ...currentSession,
-          updatedAt: Date.now(),
-          messages: [...currentSession.messages, exportMessage],
-        };
-        saveSessions(
-          sessions.map((s) =>
-            s.id === currentSession.id ? updatedSession : s
-          ),
-          updatedSession
-        );
-        scrollToBottom(false);
-      }
-
-      setExportNotice(
-        usedLatex
-          ? "PDF berhasil dibuat" + (options?.attach ? " dan dilampirkan ke percakapan." : " dan diunduh.")
-          : "PDF berhasil dibuat" + (options?.attach ? " dan dilampirkan ke percakapan." : " dan diunduh.")
-      );
-      setTimeout(() => setExportNotice(null), 6000);
-    } catch (err) {
-      console.error("Generate PDF error:", err);
-      setExportNotice(
-        err instanceof Error ? err.message : "Gagal membuat PDF solusi."
-      );
-    } finally {
-      setExportingMessageId(null);
-      setIsExportingSession(false);
-    }
-  };
-
   const filteredSessions = sessions.filter((s) =>
     s.title.toLowerCase().includes(searchQuery.toLowerCase())
   );
@@ -825,14 +690,14 @@ export default function HomePage() {
             <div className="flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg bg-[#eae8e1]/70 border border-[#dedbd2] text-xs">
               <div className="flex items-center gap-2 min-w-0">
                 <div className="w-6 h-6 rounded-full bg-stone-300 flex items-center justify-center font-medium text-stone-800 text-[11px] shrink-0">
-                  {(user.displayName || user.email || "M")[0].toUpperCase()}
+                  {user.fullName[0].toUpperCase()}
                 </div>
                 <div className="truncate text-left leading-tight">
                   <div className="font-semibold text-stone-800 truncate">
-                    {user.displayName || "Mahasiswa"}
+                    {user.fullName}
                   </div>
                   <div className="text-[10px] text-stone-500">
-                    {user.isDemo ? "Mode Demo" : "Firebase User"}
+                    NIM {user.nim}
                   </div>
                 </div>
               </div>
@@ -850,7 +715,7 @@ export default function HomePage() {
               className="w-full flex items-center justify-center gap-2 px-3 py-2 mt-1 rounded-lg bg-stone-800 text-white text-xs font-medium hover:bg-stone-900 transition-colors cursor-pointer"
             >
               <LogIn className="w-3.5 h-3.5" />
-              <span>Masuk / Daftar</span>
+              <span>Login dengan NIM</span>
             </button>
           )}
         </div>
@@ -872,6 +737,14 @@ export default function HomePage() {
             )}
 
             {/* Editable Conversation Title in Header */}
+            {user && (
+              <div className="hidden sm:block mr-3 pr-3 border-r border-[#e8e6df] leading-tight">
+                <div className="text-[10px] text-stone-500">Halo, {user.nim}</div>
+                <div className="text-xs font-semibold text-stone-800 truncate max-w-44">
+                  {user.fullName}
+                </div>
+              </div>
+            )}
             {currentSession && editingSessionId === currentSession.id ? (
               <div className="flex items-center gap-1">
                 <input
@@ -906,25 +779,8 @@ export default function HomePage() {
             )}
           </div>
 
-          {/* Right Header: Export Actions */}
+          {/* Header Actions */}
           <div className="flex items-center gap-1.5">
-            <button
-              onClick={() => handleGeneratePdf({ attach: true })}
-              disabled={
-                !currentSession ||
-                currentSession.messages.length === 0 ||
-                isExportingSession
-              }
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md bg-[#c2613a] text-white text-xs font-medium hover:bg-[#b0532f] transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
-              title="Generate PDF solusi & lampirkan ke percakapan"
-            >
-              {isExportingSession ? (
-                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              ) : (
-                <FileText className="w-3.5 h-3.5" />
-              )}
-              <span className="hidden sm:inline">Generate PDF</span>
-            </button>
             <button
               onClick={handleExportMarkdown}
               disabled={!currentSession || currentSession.messages.length === 0}
@@ -935,23 +791,6 @@ export default function HomePage() {
             </button>
           </div>
         </header>
-
-        {/* Export notice banner */}
-        {exportNotice && (
-          <div className="mx-4 md:mx-8 mt-2 shrink-0">
-            <div className="max-w-3xl mx-auto flex items-start gap-2 rounded-lg border border-[#e8e6df] bg-[#f7f5ef] px-3 py-2 text-xs text-stone-700">
-              <FileText className="w-3.5 h-3.5 text-[#c2613a] shrink-0 mt-0.5" />
-              <span className="flex-1">{exportNotice}</span>
-              <button
-                onClick={() => setExportNotice(null)}
-                className="p-0.5 text-stone-400 hover:text-stone-700 cursor-pointer"
-                title="Tutup"
-              >
-                <X className="w-3 h-3" />
-              </button>
-            </div>
-          </div>
-        )}
 
         {/* Message Stream */}
         <div
@@ -1051,23 +890,6 @@ export default function HomePage() {
                                 <Check className="w-3.5 h-3.5 text-emerald-600" />
                               ) : (
                                 <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                            <button
-                              onClick={() =>
-                                handleGeneratePdf({
-                                  messageId: message.id,
-                                  attach: true,
-                                })
-                              }
-                              disabled={exportingMessageId === message.id}
-                              className="p-1 hover:text-[#c2613a] transition-colors disabled:opacity-40 cursor-pointer"
-                              title="Generate PDF solusi ini & lampirkan"
-                            >
-                              {exportingMessageId === message.id ? (
-                                <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                              ) : (
-                                <FileDown className="w-3.5 h-3.5" />
                               )}
                             </button>
                             <span className="text-[11px] font-mono text-stone-400">
@@ -1211,7 +1033,7 @@ export default function HomePage() {
                   }
                 }}
                 rows={2}
-                placeholder="Tanyakan rumus, unggah PDF/gambar, atau tempel screenshot..."
+                placeholder="Tanyakan rumus, unggah gambar, atau tempel screenshot..."
                 className="w-full bg-transparent border-0 text-sm text-[#1f1e1d] placeholder-stone-400 focus:outline-none resize-none px-1 max-h-36 leading-relaxed"
               />
 
@@ -1223,7 +1045,7 @@ export default function HomePage() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isStreaming || isReadingFiles || pendingAttachments.length >= MAX_ATTACHMENTS}
                     className="p-1.5 rounded-md text-stone-500 hover:text-stone-800 hover:bg-[#f4f2ec] disabled:opacity-30 cursor-pointer"
-                    title="Unggah file (PDF, DOCX, gambar, teks)"
+                    title="Unggah file (DOCX, gambar, teks)"
                   >
                     {isReadingFiles ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1234,7 +1056,7 @@ export default function HomePage() {
                   <span className="text-[11px] text-stone-400 select-none truncate">
                     {isDraggingFiles
                       ? "Lepaskan berkas untuk diunggah"
-                      : "PDF, DOCX, gambar, atau teks · maks 8 MB"}
+                      : "DOCX, gambar, atau teks · maks 8 MB"}
                   </span>
                 </div>
 

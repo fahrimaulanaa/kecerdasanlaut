@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { extractText, getDocumentProxy } from "unpdf";
 import mammoth from "mammoth";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
 
@@ -23,16 +22,16 @@ export async function POST(request: Request) {
     }
 
     const ext = file.name.toLowerCase().split(".").pop() || "";
+    if (ext === "pdf" || file.type === "application/pdf") {
+      return NextResponse.json(
+        { error: "Format PDF tidak didukung." },
+        { status: 415 }
+      );
+    }
     const buffer = Buffer.from(await file.arrayBuffer());
     let extractedText = "";
 
-    if (file.type === "application/pdf" || ext === "pdf") {
-      const pdf = await getDocumentProxy(new Uint8Array(buffer));
-      const result = await extractText(pdf, { mergePages: true });
-      extractedText = Array.isArray(result.text)
-        ? result.text.join("\n\n")
-        : String(result.text || "");
-    } else if (ext === "doc") {
+    if (ext === "doc") {
       return NextResponse.json(
         {
           error:
@@ -51,7 +50,7 @@ export async function POST(request: Request) {
     if (!extractedText) {
       return NextResponse.json(
         {
-          error: `Tidak ada teks yang dapat dibaca dari ${file.name}. Jika ini PDF hasil scan, unggah sebagai gambar.`,
+          error: `Tidak ada teks yang dapat dibaca dari ${file.name}.`,
         },
         { status: 422 }
       );

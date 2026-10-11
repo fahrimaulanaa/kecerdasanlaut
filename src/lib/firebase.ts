@@ -1,15 +1,5 @@
 import { initializeApp, getApps, getApp, type FirebaseApp } from "firebase/app";
 import {
-  getAuth,
-  type Auth,
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  signOut as firebaseSignOut,
-  sendPasswordResetEmail,
-  onAuthStateChanged,
-  type User,
-} from "firebase/auth";
-import {
   getFirestore,
   type Firestore,
   collection,
@@ -82,18 +72,16 @@ export function clearFirebaseConfig() {
 }
 
 let firebaseApp: FirebaseApp | null = null;
-let firebaseAuth: Auth | null = null;
 let firestoreDb: Firestore | null = null;
 
 export function initFirebase(): {
   app: FirebaseApp | null;
-  auth: Auth | null;
   db: Firestore | null;
   isConfigured: boolean;
 } {
   const config = getActiveFirebaseConfig();
   if (!config.apiKey || !config.projectId) {
-    return { app: null, auth: null, db: null, isConfigured: false };
+    return { app: null, db: null, isConfigured: false };
   }
 
   try {
@@ -102,12 +90,11 @@ export function initFirebase(): {
     } else {
       firebaseApp = getApp();
     }
-    firebaseAuth = getAuth(firebaseApp);
     firestoreDb = getFirestore(firebaseApp);
-    return { app: firebaseApp, auth: firebaseAuth, db: firestoreDb, isConfigured: true };
+    return { app: firebaseApp, db: firestoreDb, isConfigured: true };
   } catch (error) {
     console.warn("Firebase initialization warning:", error);
-    return { app: null, auth: null, db: null, isConfigured: false };
+    return { app: null, db: null, isConfigured: false };
   }
 }
 
@@ -118,11 +105,6 @@ export function getDb(): Firestore | null {
 }
 
 export {
-  signInWithEmailAndPassword,
-  createUserWithEmailAndPassword,
-  firebaseSignOut,
-  sendPasswordResetEmail,
-  onAuthStateChanged,
   getFirestore,
   collection,
   doc,
@@ -131,6 +113,5 @@ export {
   getDocs,
   deleteDoc,
   onSnapshot,
-  type User,
   type Firestore,
 };

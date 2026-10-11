@@ -16,7 +16,6 @@ export const MAX_FILE_BYTES = 8 * 1024 * 1024;
 export const MAX_EXTRACTED_CHARS = 80_000;
 
 export const ACCEPT_FILE_TYPES = [
-  ".pdf",
   ".doc",
   ".docx",
   ".txt",
@@ -100,8 +99,6 @@ export function isTextFile(file: File): boolean {
 export function needsServerParse(file: File): boolean {
   const ext = fileExtension(file.name);
   return (
-    file.type === "application/pdf" ||
-    ext === "pdf" ||
     file.type ===
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
     ext === "docx" ||
@@ -238,48 +235,8 @@ export async function readLocalFile(file: File): Promise<ChatAttachment> {
   }
 
   throw new Error(
-    `${file.name} tidak didukung. Unggah PDF, DOCX, gambar, atau berkas teks.`
+    `${file.name} tidak didukung. Unggah DOCX, gambar, atau berkas teks.`
   );
-}
-
-/**
- * Build a ChatAttachment from an already-generated PDF blob (e.g. an exported
- * solution). The binary is kept in memory only, exactly like an uploaded file.
- */
-export async function attachmentFromPdfBlob(
-  blob: Blob,
-  name: string
-): Promise<ChatAttachment> {
-  const dataUrl = await new Promise<string>((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result || ""));
-    reader.onerror = () => reject(new Error(`Gagal menyiapkan ${name}`));
-    reader.readAsDataURL(blob);
-  });
-
-  // Try to extract text so the AI can read the PDF content too.
-  let extractedText = "";
-  try {
-    const form = new FormData();
-    form.append("file", new File([blob], name, { type: "application/pdf" }));
-    const res = await fetch("/api/files/parse", { method: "POST", body: form });
-    const data = await res.json().catch(() => ({}));
-    if (res.ok && data.extractedText) {
-      extractedText = truncateExtractedText(String(data.extractedText));
-    }
-  } catch {
-    // Non-fatal: the attachment is still usable as a binary reference.
-  }
-
-  return {
-    id: "pdf-export-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
-    name,
-    mimeType: "application/pdf",
-    size: blob.size,
-    kind: "document",
-    extractedText: extractedText || undefined,
-    dataUrl,
-  };
 }
 
 export function buildUserVisibleContent(

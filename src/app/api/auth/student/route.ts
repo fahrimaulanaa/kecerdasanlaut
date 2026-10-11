@@ -1,0 +1,63 @@
+import { NextResponse } from "next/server";
+
+interface PddiktiStudent {
+  nim?: unknown;
+  nama?: unknown;
+  nama_prodi?: unknown;
+}
+
+export async function GET(request: Request) {
+  const nim = new URL(request.url).searchParams.get("nim")?.trim() || "";
+
+  if (!/^\d+$/.test(nim)) {
+    return NextResponse.json({ error: "NIM tidak valid." }, { status: 400 });
+  }
+
+  try {
+    const response = await fetch(
+      `https://pddikti.kemdiktisaintek.go.id/api/pencarian/enc/all/${encodeURIComponent(nim)}`,
+      { cache: "no-store" }
+    );
+
+    if (!response.ok) {
+      return NextResponse.json(
+        { error: "Data mahasiswa tidak dapat diambil dari PDDIKTI." },
+        { status: 502 }
+      );
+    }
+
+    const payload = (await response.json()) as {
+      data?: { mahasiswa?: PddiktiStudent[] };
+    };
+    const students = Array.isArray(payload.data?.mahasiswa)
+      ? payload.data.mahasiswa
+      : [];
+    const match = students.find(
+      (student) =>
+        student.nim === nim &&
+        typeof student.nama === "string" &&
+        student.nama_prodi === "TEKNIK KELAUTAN"
+    );
+
+    if (!match || typeof match.nama !== "string") {
+      return NextResponse.json(
+        { error: "NIM tidak ditemukan atau bukan mahasiswa Teknik Kelautan." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({
+      student: {
+        nim,
+        fullName: match.nama,
+        studyProgram: "TEKNIK KELAUTAN",
+      },
+    });
+  } catch (error) {
+    console.error("PDDIKTI student verification error:", error);
+    return NextResponse.json(
+      { error: "Verifikasi gagal. Silakan coba lagi." },
+      { status: 502 }
+    );
+  }
+}

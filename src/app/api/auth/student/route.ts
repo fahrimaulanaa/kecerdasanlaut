@@ -16,7 +16,16 @@ export async function GET(request: Request) {
   try {
     const response = await fetch(
       `https://pddikti.kemdiktisaintek.go.id/api/pencarian/enc/all/${encodeURIComponent(nim)}`,
-      { cache: "no-store" }
+      {
+        cache: "no-store",
+        headers: {
+          Accept: "application/json, text/plain, */*",
+          Origin: "https://pddikti.kemdiktisaintek.go.id",
+          Referer: "https://pddikti.kemdiktisaintek.go.id/",
+          "User-Agent":
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131 Safari/537.36",
+        },
+      }
     );
 
     if (!response.ok) {
@@ -36,7 +45,8 @@ export async function GET(request: Request) {
       (student) =>
         student.nim === nim &&
         typeof student.nama === "string" &&
-        student.nama_prodi === "TEKNIK KELAUTAN"
+        typeof student.nama_prodi === "string" &&
+        student.nama_prodi.trim().toUpperCase() === "TEKNIK KELAUTAN"
     );
 
     if (!match || typeof match.nama !== "string") {

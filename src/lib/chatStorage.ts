@@ -7,6 +7,12 @@ import {
   collection,
   onSnapshot,
 } from "./firebase";
+import {
+  stripAttachmentBinaries,
+  type ChatAttachment,
+} from "./fileAttachments";
+
+export type { ChatAttachment };
 
 export interface ChatMessage {
   id: string;
@@ -15,6 +21,7 @@ export interface ChatMessage {
   reasoning?: string;
   model?: string;
   timestamp: number;
+  attachments?: ChatAttachment[];
 }
 
 export interface ChatSession {
@@ -27,6 +34,22 @@ export interface ChatSession {
 }
 
 const COLLECTION_NAME = "riwayat-chat";
+
+function normalizeAttachments(raw: unknown): ChatAttachment[] | undefined {
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+  const attachments: ChatAttachment[] = raw
+    .filter((item) => item && typeof item === "object")
+    .map((item: any, idx: number) => ({
+      id: typeof item.id === "string" ? item.id : `att-${idx}`,
+      name: typeof item.name === "string" ? item.name : "berkas",
+      mimeType: typeof item.mimeType === "string" ? item.mimeType : "application/octet-stream",
+      size: typeof item.size === "number" ? item.size : 0,
+      kind: item.kind === "image" ? "image" : "document",
+      extractedText:
+        typeof item.extractedText === "string" ? item.extractedText : undefined,
+    }));
+  return attachments.length ? attachments : undefined;
+}
 
 /**
  * Menyimpan atau memperbarui sesi percakapan ke Cloud Firestore
@@ -58,6 +81,7 @@ export async function saveSessionToFirestore(
         reasoning: m.reasoning || "",
         model: m.model || "",
         timestamp: m.timestamp || Date.now(),
+        attachments: stripAttachmentBinaries(m.attachments) || [],
       })),
     };
 
@@ -108,6 +132,7 @@ export async function loadSessionsFromFirestore(): Promise<ChatSession[]> {
         reasoning: typeof m.reasoning === "string" ? m.reasoning : "",
         model: typeof m.model === "string" ? m.model : "",
         timestamp: typeof m.timestamp === "number" ? m.timestamp : Date.now(),
+        attachments: normalizeAttachments(m.attachments),
       }));
 
       // Lewati dokumen dummy jika kosong tanpa id/title/messages
@@ -159,6 +184,7 @@ export function subscribeSessionsFromFirestore(
             reasoning: typeof m.reasoning === "string" ? m.reasoning : "",
             model: typeof m.model === "string" ? m.model : "",
             timestamp: typeof m.timestamp === "number" ? m.timestamp : Date.now(),
+            attachments: normalizeAttachments(m.attachments),
           }));
 
           if (!data.title && messages.length === 0 && !data.createdAt) {

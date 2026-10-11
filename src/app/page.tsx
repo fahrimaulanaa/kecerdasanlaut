@@ -17,6 +17,10 @@ import {
   Brain,
   Search,
   Sparkles,
+  Paperclip,
+  FileText,
+  Image as ImageIcon,
+  Loader2,
 } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
 import { LatexMarkdownRenderer } from "@/components/LatexMarkdownRenderer";
@@ -31,6 +35,16 @@ import {
   type ChatMessage,
   type ChatSession,
 } from "@/lib/chatStorage";
+import {
+  ACCEPT_FILE_TYPES,
+  MAX_ATTACHMENTS,
+  buildUserVisibleContent,
+  formatFileSize,
+  readLocalFile,
+  stripAttachmentBinaries,
+  toApiMessageContent,
+  type ChatAttachment,
+} from "@/lib/fileAttachments";
 
 export default function HomePage() {
   const { user, signOut } = useAuth();
@@ -57,8 +71,13 @@ export default function HomePage() {
   // Refs
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
+  const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
+  const [isReadingFiles, setIsReadingFiles] = useState(false);
+  const [fileError, setFileError] = useState<string | null>(null);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
 
   // Load sessions from localStorage & sync from Cloud Firestore
   useEffect(() => {
@@ -147,15 +166,26 @@ export default function HomePage() {
   }, []);
 
   // Save sessions helper (localStorage + Firestore)
+  const persistableSession = (session: ChatSession): ChatSession => ({
+    ...session,
+    messages: session.messages.map((m) => ({
+      ...m,
+      attachments: stripAttachmentBinaries(m.attachments),
+    })),
+  });
+
   const saveSessions = (updated: ChatSession[], sessionToSync?: ChatSession) => {
     setSessions(updated);
     try {
-      localStorage.setItem("oceanai_sessions", JSON.stringify(updated));
+      localStorage.setItem(
+        "oceanai_sessions",
+        JSON.stringify(updated.map(persistableSession))
+      );
     } catch (e) {
       console.error("Failed to persist sessions", e);
     }
     if (sessionToSync) {
-      saveSessionToFirestore(sessionToSync, user?.uid);
+      saveSessionToFirestore(persistableSession(sessionToSync), user?.uid);
     }
   };
 
@@ -256,9 +286,46 @@ export default function HomePage() {
     setEditingSessionId(null);
   };
 
+  const addFiles = async (fileList: FileList | File[]) => {
+    const files = Array.from(fileList);
+    if (!files.length) return;
+
+    setFileError(null);
+    const remaining = MAX_ATTACHMENTS - pendingAttachments.length;
+    if (remaining <= 0) {
+      setFileError(`Maksimal ${MAX_ATTACHMENTS} berkas per pesan.`);
+      return;
+    }
+
+    const selected = files.slice(0, remaining);
+    setIsReadingFiles(true);
+    try {
+      const parsed = await Promise.all(selected.map((file) => readLocalFile(file)));
+      setPendingAttachments((prev) => [...prev, ...parsed].slice(0, MAX_ATTACHMENTS));
+      if (files.length > remaining) {
+        setFileError(`Hanya ${remaining} berkas tambahan yang diterima.`);
+      }
+    } catch (err) {
+      setFileError(
+        err instanceof Error ? err.message : "Gagal membaca berkas yang diunggah."
+      );
+    } finally {
+      setIsReadingFiles(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  };
+
+  const removePendingAttachment = (id: string) => {
+    setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
+  };
+
   const handleSendMessage = async (customPrompt?: string) => {
-    const promptToSend = (customPrompt || input).trim();
-    if (!promptToSend || isStreaming) return;
+    const attachmentsToSend = customPrompt ? [] : pendingAttachments;
+    const promptToSend = buildUserVisibleContent(
+      customPrompt || input,
+      attachmentsToSend
+    ).trim();
+    if ((!promptToSend && attachmentsToSend.length === 0) || isStreaming) return;
 
     if (!currentSession) return;
 
@@ -267,6 +334,7 @@ export default function HomePage() {
       role: "user",
       content: promptToSend,
       timestamp: Date.now(),
+      attachments: attachmentsToSend.length ? attachmentsToSend : undefined,
     };
 
     const isFirstMessage = currentSession.messages.length === 0;
@@ -289,6 +357,8 @@ export default function HomePage() {
 
     if (!customPrompt) {
       setInput("");
+      setPendingAttachments([]);
+      setFileError(null);
       if (textareaRef.current) {
         textareaRef.current.style.height = "auto";
       }
@@ -305,7 +375,7 @@ export default function HomePage() {
 
       const contextMessages = updatedUserSession.messages.map((m) => ({
         role: m.role,
-        content: m.content,
+        content: toApiMessageContent(m.content, m.attachments),
       }));
 
       const res = await fetch("/api/chat", {
@@ -458,6 +528,11 @@ export default function HomePage() {
       lines.push(`### ${m.role === "user" ? "Mahasiswa" : "OceanAI"}`);
       if (m.reasoning) {
         lines.push(`> **Proses Berpikir:**\n> ${m.reasoning}\n`);
+      }
+      if (m.attachments?.length) {
+        lines.push(
+          `*Lampiran:* ${m.attachments.map((a) => a.name).join(", ")}\n`
+        );
       }
       lines.push(`${m.content}\n\n---\n`);
     });
@@ -743,6 +818,35 @@ export default function HomePage() {
                     {isUser ? (
                       /* User message Claude Style */
                       <div className="max-w-[85%] rounded-2xl px-5 py-3.5 bg-[#f0eee6] text-[#1f1e1d] text-sm leading-relaxed border border-[#e5e3dc] shadow-2xs">
+                        {message.attachments && message.attachments.length > 0 && (
+                          <div className="flex flex-col gap-2 mb-2">
+                            {message.attachments.map((att) =>
+                              att.kind === "image" && att.dataUrl ? (
+                                <img
+                                  key={att.id}
+                                  src={att.dataUrl}
+                                  alt={att.name}
+                                  className="max-h-48 rounded-lg border border-[#e5e3dc] object-contain bg-white"
+                                />
+                              ) : (
+                                <div
+                                  key={att.id}
+                                  className="flex items-center gap-2 rounded-lg bg-white/70 border border-[#e5e3dc] px-2.5 py-1.5 text-xs"
+                                >
+                                  {att.kind === "image" ? (
+                                    <ImageIcon className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                                  ) : (
+                                    <FileText className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                                  )}
+                                  <span className="truncate font-medium">{att.name}</span>
+                                  <span className="text-stone-400 shrink-0">
+                                    {formatFileSize(att.size)}
+                                  </span>
+                                </div>
+                              )
+                            )}
+                          </div>
+                        )}
                         <div className="whitespace-pre-wrap">{message.content}</div>
                       </div>
                     ) : (
@@ -828,11 +932,90 @@ export default function HomePage() {
         {/* Input Box - Claude Style Floating Card */}
         <div className="p-4 bg-[#faf9f5] shrink-0">
           <div className="max-w-3xl mx-auto">
-            <div className="relative bg-white border border-[#dedbd2] rounded-2xl shadow-xs focus-within:border-stone-400 focus-within:shadow-md transition-all p-3">
+            <div
+              className={`relative bg-white border rounded-2xl shadow-xs focus-within:border-stone-400 focus-within:shadow-md transition-all p-3 ${
+                isDraggingFiles
+                  ? "border-[#c2613a] bg-[#faf6f2]"
+                  : "border-[#dedbd2]"
+              }`}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setIsDraggingFiles(true);
+              }}
+              onDragLeave={(e) => {
+                if (e.currentTarget.contains(e.relatedTarget as Node)) return;
+                setIsDraggingFiles(false);
+              }}
+              onDrop={(e) => {
+                e.preventDefault();
+                setIsDraggingFiles(false);
+                if (e.dataTransfer.files?.length) addFiles(e.dataTransfer.files);
+              }}
+            >
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept={ACCEPT_FILE_TYPES}
+                className="hidden"
+                onChange={(e) => {
+                  if (e.target.files?.length) addFiles(e.target.files);
+                }}
+              />
+
+              {pendingAttachments.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-2 px-1">
+                  {pendingAttachments.map((att) => (
+                    <div
+                      key={att.id}
+                      className="group relative flex items-center gap-2 rounded-lg border border-[#e8e6df] bg-[#f7f5ef] px-2 py-1.5 text-xs max-w-[220px]"
+                    >
+                      {att.kind === "image" && att.dataUrl ? (
+                        <img
+                          src={att.dataUrl}
+                          alt={att.name}
+                          className="w-8 h-8 rounded object-cover shrink-0"
+                        />
+                      ) : att.kind === "image" ? (
+                        <ImageIcon className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                      ) : (
+                        <FileText className="w-3.5 h-3.5 text-stone-500 shrink-0" />
+                      )}
+                      <div className="min-w-0">
+                        <div className="truncate font-medium text-stone-800">{att.name}</div>
+                        <div className="text-[10px] text-stone-400">
+                          {formatFileSize(att.size)}
+                          {att.extractedText ? " · dibaca" : ""}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => removePendingAttachment(att.id)}
+                        className="p-0.5 rounded text-stone-400 hover:text-rose-600 hover:bg-white cursor-pointer"
+                        title="Hapus lampiran"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {fileError && (
+                <p className="px-1 mb-2 text-[11px] text-rose-700">{fileError}</p>
+              )}
+
               <textarea
                 ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
+                onPaste={(e) => {
+                  const files = Array.from(e.clipboardData.files || []);
+                  if (files.length) {
+                    e.preventDefault();
+                    addFiles(files);
+                  }
+                }}
                 onKeyDown={(e) => {
                   if (e.key === "Enter" && !e.shiftKey) {
                     e.preventDefault();
@@ -840,15 +1023,32 @@ export default function HomePage() {
                   }
                 }}
                 rows={2}
-                placeholder="Tanyakan analisis gelombang, persamaan Morison, atau koding Python..."
+                placeholder="Tanyakan rumus, unggah PDF/gambar, atau tempel screenshot..."
                 className="w-full bg-transparent border-0 text-sm text-[#1f1e1d] placeholder-stone-400 focus:outline-none resize-none px-1 max-h-36 leading-relaxed"
               />
 
               {/* Bottom bar of Claude's input box */}
               <div className="flex items-center justify-between pt-2 border-t border-[#f4f2ec] text-xs">
-                <span className="text-[11px] text-stone-400 select-none">
-                  OceanAI dapat membuat kesalahan. Verifikasi rumus penting.
-                </span>
+                <div className="flex items-center gap-2 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    disabled={isStreaming || isReadingFiles || pendingAttachments.length >= MAX_ATTACHMENTS}
+                    className="p-1.5 rounded-md text-stone-500 hover:text-stone-800 hover:bg-[#f4f2ec] disabled:opacity-30 cursor-pointer"
+                    title="Unggah file (PDF, DOCX, gambar, teks)"
+                  >
+                    {isReadingFiles ? (
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                    ) : (
+                      <Paperclip className="w-4 h-4" />
+                    )}
+                  </button>
+                  <span className="text-[11px] text-stone-400 select-none truncate">
+                    {isDraggingFiles
+                      ? "Lepaskan berkas untuk diunggah"
+                      : "PDF, DOCX, gambar, atau teks · maks 8 MB"}
+                  </span>
+                </div>
 
                 <div className="flex items-center gap-2">
                   {/* Single Model Selector with Logos */}
@@ -870,7 +1070,10 @@ export default function HomePage() {
                   ) : (
                     <button
                       type="button"
-                      disabled={!input.trim()}
+                      disabled={
+                        isReadingFiles ||
+                        (!input.trim() && pendingAttachments.length === 0)
+                      }
                       onClick={() => handleSendMessage()}
                       className="w-7 h-7 rounded-full bg-[#c2613a] text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#b0532f] transition-colors shrink-0 cursor-pointer"
                       title="Kirim (Enter)"

@@ -1,0 +1,2 @@
+Persamaan dispersi Airy: omega^2 = g k tanh(k h)
+Contoh: T = 10 s, h = 40 m. Hitung panjang gelombang L.

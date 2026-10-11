@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { X, Mail, Lock, User, AlertCircle, Waves, Check, ArrowRight, Flame } from "lucide-react";
+import { X, Mail, Lock, User, AlertCircle, Check, ArrowRight } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 
 interface AuthModalProps {
@@ -69,82 +69,73 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
   };
 
   return (
-    <div className="ocean-modal-backdrop">
-      <div className="ocean-modal-card max-w-md">
-        <div className="ocean-modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/20">
-              <Waves className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white">
-                {mode === "login" && "Masuk ke OceanAI"}
-                {mode === "register" && "Registrasi Akun Mahasiswa"}
-                {mode === "forgot" && "Reset Kata Sandi"}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Portal Belajar & Riset Teknik Kelautan
-              </p>
-            </div>
+    <div className="claude-modal-backdrop">
+      <div className="claude-modal-card max-w-md">
+        <div className="claude-modal-header">
+          <div>
+            <h3 className="text-base font-bold text-stone-900">
+              {mode === "login" && "Masuk ke OceanAI"}
+              {mode === "register" && "Daftar Akun Mahasiswa"}
+              {mode === "forgot" && "Reset Kata Sandi"}
+            </h3>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Portal Pembelajaran Mahasiswa Teknik Kelautan
+            </p>
           </div>
-          <button onClick={onClose} className="ocean-modal-close-btn" title="Tutup">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+            title="Tutup"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         <div className="p-6 space-y-4">
-          {/* Firebase Connection Status Notice */}
-          <div className="flex items-center justify-between p-2.5 rounded-lg bg-slate-900/80 border border-slate-700/60 text-xs">
-            <div className="flex items-center gap-2">
-              <Flame
-                className={`w-4 h-4 ${
-                  isFirebaseConfigured ? "text-amber-400" : "text-slate-400"
-                }`}
-              />
-              <span className="text-slate-300">
-                {isFirebaseConfigured
-                  ? "Firebase Auth Aktif"
-                  : "Mode Demo / Belum Terhubung Firebase"}
-              </span>
-            </div>
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-stone-50 border border-stone-200/80 text-xs">
+            <span className="text-stone-600">
+              {isFirebaseConfigured
+                ? "● Firebase Auth Aktif"
+                : "○ Mode Pengembang / Demo Aktif"}
+            </span>
             <button
               type="button"
               onClick={() => {
                 onClose();
                 onOpenFirebaseConfig();
               }}
-              className="text-cyan-400 hover:text-cyan-300 font-medium underline text-[11px]"
+              className="text-amber-800 hover:text-amber-900 font-medium underline text-[11px]"
             >
               Pengaturan Firebase
             </button>
           </div>
 
           {error && (
-            <div className="p-3 rounded-lg text-xs flex items-center gap-2 bg-rose-500/15 border border-rose-500/30 text-rose-300">
+            <div className="p-3 rounded-lg text-xs flex items-center gap-2 bg-rose-50 border border-rose-200 text-rose-700">
               <AlertCircle className="w-4 h-4 shrink-0" />
               <span>{error}</span>
             </div>
           )}
 
           {successMsg && (
-            <div className="p-3 rounded-lg text-xs flex items-center gap-2 bg-emerald-500/15 border border-emerald-500/30 text-emerald-300">
+            <div className="p-3 rounded-lg text-xs flex items-center gap-2 bg-emerald-50 border border-emerald-200 text-emerald-700">
               <Check className="w-4 h-4 shrink-0" />
               <span>{successMsg}</span>
             </div>
           )}
 
           {mode !== "forgot" && (
-            <div className="flex rounded-xl bg-slate-900/60 p-1 border border-slate-800">
+            <div className="flex rounded-lg bg-stone-100 p-1 border border-stone-200/60">
               <button
                 type="button"
                 onClick={() => {
                   setMode("login");
                   setError(null);
                 }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                   mode === "login"
-                    ? "bg-cyan-600 text-white shadow-md"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-white text-stone-900 shadow-sm"
+                    : "text-stone-500 hover:text-stone-900"
                 }`}
               >
                 Masuk
@@ -155,10 +146,10 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
                   setMode("register");
                   setError(null);
                 }}
-                className={`flex-1 py-1.5 text-xs font-semibold rounded-lg transition-colors ${
+                className={`flex-1 py-1.5 text-xs font-semibold rounded-md transition-colors ${
                   mode === "register"
-                    ? "bg-cyan-600 text-white shadow-md"
-                    : "text-slate-400 hover:text-white"
+                    ? "bg-white text-stone-900 shadow-sm"
+                    : "text-stone-500 hover:text-stone-900"
                 }`}
               >
                 Daftar Baru
@@ -166,35 +157,35 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
+          <form onSubmit={handleSubmit} className="space-y-3 text-xs">
             {mode === "register" && (
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Nama Lengkap</label>
+                <label className="block text-stone-700 mb-1 font-medium">Nama Lengkap</label>
                 <div className="relative">
-                  <User className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <User className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
                   <input
                     type="text"
                     required
                     placeholder="Contoh: Budi Santoso"
                     value={displayName}
                     onChange={(e) => setDisplayName(e.target.value)}
-                    className="ocean-input pl-9"
+                    className="claude-input pl-9"
                   />
                 </div>
               </div>
             )}
 
             <div>
-              <label className="block text-slate-300 mb-1 font-medium">Email Mahasiswa</label>
+              <label className="block text-stone-700 mb-1 font-medium">Email</label>
               <div className="relative">
-                <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                <Mail className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
                 <input
                   type="email"
                   required
                   placeholder="nama@kelautan.ac.id"
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
-                  className="ocean-input pl-9"
+                  className="claude-input pl-9"
                 />
               </div>
             </div>
@@ -202,26 +193,26 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
             {mode !== "forgot" && (
               <div>
                 <div className="flex items-center justify-between mb-1">
-                  <label className="block text-slate-300 font-medium">Kata Sandi</label>
+                  <label className="block text-stone-700 font-medium">Kata Sandi</label>
                   {mode === "login" && (
                     <button
                       type="button"
                       onClick={() => setMode("forgot")}
-                      className="text-cyan-400 hover:text-cyan-300 text-[11px]"
+                      className="text-amber-800 hover:text-amber-900 text-[11px]"
                     >
                       Lupa sandi?
                     </button>
                   )}
                 </div>
                 <div className="relative">
-                  <Lock className="w-4 h-4 text-slate-400 absolute left-3 top-3 pointer-events-none" />
+                  <Lock className="w-4 h-4 text-stone-400 absolute left-3 top-2.5 pointer-events-none" />
                   <input
                     type="password"
                     required
                     placeholder="••••••••"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
-                    className="ocean-input pl-9"
+                    className="claude-input pl-9"
                   />
                 </div>
               </div>
@@ -230,15 +221,15 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full ocean-btn-primary py-2.5 mt-2 flex items-center justify-center gap-2"
+              className="w-full claude-btn-primary py-2.5 mt-2 flex items-center justify-center gap-2"
             >
               {isSubmitting ? (
                 <span>Memproses...</span>
               ) : (
                 <>
                   <span>
-                    {mode === "login" && "Masuk ke Akun"}
-                    {mode === "register" && "Buat Akun Sekarang"}
+                    {mode === "login" && "Masuk"}
+                    {mode === "register" && "Buat Akun"}
                     {mode === "forgot" && "Kirim Email Reset"}
                   </span>
                   <ArrowRight className="w-4 h-4" />
@@ -252,20 +243,20 @@ export function AuthModal({ isOpen, onClose, onOpenFirebaseConfig }: AuthModalPr
               <button
                 type="button"
                 onClick={() => setMode("login")}
-                className="text-xs text-slate-400 hover:text-cyan-300"
+                className="text-xs text-stone-500 hover:text-stone-800"
               >
                 ← Kembali ke halaman Masuk
               </button>
             </div>
           )}
 
-          <div className="pt-3 border-t border-slate-800 text-center">
+          <div className="pt-3 border-t border-stone-200/80 text-center">
             <button
               type="button"
               onClick={handleGuest}
-              className="text-xs text-slate-400 hover:text-cyan-300 underline"
+              className="text-xs text-stone-500 hover:text-stone-800 underline"
             >
-              Masuk Cepat Sebagai Tamu Mahasiswa (Tanpa Akun)
+              Lanjut Sebagai Tamu Mahasiswa (Tanpa Akun)
             </button>
           </div>
         </div>

@@ -12,22 +12,32 @@ interface LatexMarkdownRendererProps {
   content: string;
 }
 
-// Preprocess model markdown to normalize LaTeX delimiters
-function normalizeLatex(text: string): string {
-  if (!text) return "";
+// Comprehensive LaTeX preprocessor to catch raw and untranslated formulas
+export function normalizeLatex(rawText: string): string {
+  if (!rawText) return "";
 
-  let cleaned = text;
+  let text = rawText;
 
-  // Convert \[ ... \] to $$ ... $$ (display math)
-  cleaned = cleaned.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$\n${math.trim()}\n$$`);
+  // 1. Convert display math \[ ... \] to $$ ... $$
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$\n${math.trim()}\n$$`);
 
-  // Convert \( ... \) to $ ... $ (inline math)
-  cleaned = cleaned.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math.trim()}$`);
+  // 2. Convert inline math \( ... \) to $ ... $
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math.trim()}$`);
 
-  // Fix common case where model outputs raw $$ inside tight paragraphs without spacing
-  cleaned = cleaned.replace(/([^\n])\$\$([\s\S]*?)\$\$([^\n])/g, "$1\n\n$$$2$$\n\n$3");
+  // 3. Convert parenthesized LaTeX symbols like (\rho), (\omega), (\nabla), (\eta) to ($\rho$), ($\omega$), etc.
+  const commonGreek = "alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega|nabla|partial|infty|sum|int|prod";
+  
+  // Replace (\rho) or ( \rho ) with ($\rho$)
+  text = text.replace(new RegExp(`\\(\\s*\\\\(${commonGreek})\\s*\\)`, "g"), "($\\$1$)");
 
-  return cleaned;
+  // 4. Wrap standalone TeX macros that are preceded by space or punctuation and not already inside $ or backticks
+  // Match macros like \rho, \omega, \nabla when not preceded by $ or \
+  text = text.replace(new RegExp(`(?<=[\\s,;:(]|^)\\\\(${commonGreek})(?=[\\s,;:.?!)]|$)`, "g"), "$\\$1$");
+
+  // 5. Fix common case where display math $$ has no space around it
+  text = text.replace(/([^\n])\$\$([\s\S]*?)\$\$([^\n])/g, "$1\n\n$$$2$$\n\n$3");
+
+  return text;
 }
 
 function CodeBlock({
@@ -50,35 +60,35 @@ function CodeBlock({
 
   if (isInline) {
     return (
-      <code className="ocean-inline-code" {...props}>
+      <code className="claude-inline-code" {...props}>
         {children}
       </code>
     );
   }
 
   return (
-    <div className="ocean-code-container">
-      <div className="ocean-code-header">
-        <span className="ocean-code-lang">{language || "text"}</span>
+    <div className="claude-code-container">
+      <div className="claude-code-header">
+        <span className="claude-code-lang">{language || "code"}</span>
         <button
           onClick={handleCopy}
-          className="ocean-code-copy-btn"
+          className="claude-code-copy-btn"
           title="Salin kode"
         >
           {copied ? (
             <>
-              <Check className="w-3.5 h-3.5 text-emerald-400" />
+              <Check className="w-3.5 h-3.5 text-emerald-600" />
               <span>Tersalin</span>
             </>
           ) : (
             <>
               <Copy className="w-3.5 h-3.5" />
-              <span>Salin</span>
+              <span>Salin kode</span>
             </>
           )}
         </button>
       </div>
-      <pre className="ocean-code-pre">
+      <pre className="claude-code-pre">
         <code className={className} {...props}>
           {children}
         </code>
@@ -91,21 +101,21 @@ export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
   const normalized = normalizeLatex(content);
 
   return (
-    <div className="ocean-markdown-body">
+    <div className="claude-markdown-body">
       <ReactMarkdown
         remarkPlugins={[remarkMath, remarkGfm]}
         rehypePlugins={[[rehypeKatex, { output: "htmlAndMathml", strict: false }]]}
         components={{
           code: CodeBlock as unknown as React.FC<React.ComponentPropsWithoutRef<"code">>,
           table: ({ children, ...props }) => (
-            <div className="ocean-table-wrapper">
-              <table className="ocean-table" {...props}>
+            <div className="claude-table-wrapper">
+              <table className="claude-table" {...props}>
                 {children}
               </table>
             </div>
           ),
           blockquote: ({ children, ...props }) => (
-            <blockquote className="ocean-blockquote" {...props}>
+            <blockquote className="claude-blockquote" {...props}>
               {children}
             </blockquote>
           ),

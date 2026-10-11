@@ -45,7 +45,7 @@ export default function RootLayout({
           crossOrigin="anonymous"
         />
       </head>
-      <body className="min-h-full flex flex-col bg-[#050b14] text-slate-100 antialiased">
+      <body className="min-h-full flex flex-col bg-[#faf9f5] text-[#2d2b28] antialiased">
         <AuthProvider>{children}</AuthProvider>
       </body>
     </html>

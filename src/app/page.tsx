@@ -2,34 +2,31 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import {
-  Waves,
-  Anchor,
-  Send,
   Plus,
   Trash2,
-  BookOpen,
-  Cloud,
+  Edit2,
+  Check,
+  X,
+  Share2,
+  Download,
   Flame,
   LogIn,
   LogOut,
   User as UserIcon,
   Menu,
-  X,
-  Sparkles,
-  Copy,
-  Check,
-  RotateCcw,
+  ArrowUp,
   StopCircle,
-  Download,
-  Share2,
+  Copy,
   ChevronDown,
   Brain,
   MessageSquare,
+  Search,
+  Sparkles,
+  Cloud,
 } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
 import { LatexMarkdownRenderer } from "@/components/LatexMarkdownRenderer";
 import { OceanTopicCards } from "@/components/OceanTopicCards";
-import { FormulaQuickSheet } from "@/components/FormulaQuickSheet";
 import { AuthModal } from "@/components/AuthModal";
 import { FirebaseConfigModal } from "@/components/FirebaseConfigModal";
 import { DeploymentModal } from "@/components/DeploymentModal";
@@ -53,19 +50,6 @@ export interface ChatSession {
   messages: ChatMessage[];
 }
 
-const MATH_SYMBOLS = [
-  { label: "\\omega", insert: "\\omega" },
-  { label: "\\lambda", insert: "\\lambda" },
-  { label: "\\rho", insert: "\\rho" },
-  { label: "\\eta", insert: "\\eta" },
-  { label: "\\nabla", insert: "\\nabla" },
-  { label: "H_s", insert: "H_s" },
-  { label: "T_p", insert: "T_p" },
-  { label: "\\tanh(kh)", insert: "\\tanh(kh)" },
-  { label: "\\int", insert: "\\int " },
-  { label: "\\sqrt{}", insert: "\\sqrt{}" },
-];
-
 export default function HomePage() {
   const { user, signOut, isFirebaseConfigured } = useAuth();
 
@@ -76,18 +60,23 @@ export default function HomePage() {
   const [input, setInput] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
+  const [searchQuery, setSearchQuery] = useState<string>("");
+
+  // Renaming state
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editTitleInput, setEditTitleInput] = useState<string>("");
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const [isFirebaseConfigOpen, setIsFirebaseConfigOpen] = useState(false);
-  const [isFormulaQuickSheetOpen, setIsFormulaQuickSheetOpen] = useState(false);
   const [isDeploymentModalOpen, setIsDeploymentModalOpen] = useState(false);
 
   // Refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const renameInputRef = useRef<HTMLInputElement>(null);
 
   // Load sessions from localStorage
   useEffect(() => {
@@ -111,10 +100,10 @@ export default function HomePage() {
       }
     }
 
-    // Default first session
+    // Default initial session
     const initialSession: ChatSession = {
       id: "session-" + Date.now(),
-      title: "Diskusi Dispersi Gelombang",
+      title: "Diskusi Hidrodinamika Kelautan",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       model: savedModel || "qwen3.8-max",
@@ -124,7 +113,7 @@ export default function HomePage() {
     setCurrentSessionId(initialSession.id);
   }, []);
 
-  // Save sessions to localStorage
+  // Save sessions helper
   const saveSessions = (updated: ChatSession[]) => {
     setSessions(updated);
     try {
@@ -142,6 +131,14 @@ export default function HomePage() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [currentSession?.messages, isStreaming]);
 
+  // Focus rename input when editing starts
+  useEffect(() => {
+    if (editingSessionId && renameInputRef.current) {
+      renameInputRef.current.focus();
+      renameInputRef.current.select();
+    }
+  }, [editingSessionId]);
+
   const handleSelectModel = (modelId: string) => {
     setSelectedModel(modelId);
     localStorage.setItem("oceanai_selected_model", modelId);
@@ -150,7 +147,7 @@ export default function HomePage() {
   const handleCreateNewChat = () => {
     const newSession: ChatSession = {
       id: "session-" + Date.now(),
-      title: "Topik Kelautan Baru",
+      title: "Percakapan Baru",
       createdAt: Date.now(),
       updatedAt: Date.now(),
       model: selectedModel,
@@ -159,7 +156,9 @@ export default function HomePage() {
     const updated = [newSession, ...sessions];
     saveSessions(updated);
     setCurrentSessionId(newSession.id);
-    setIsSidebarOpen(false);
+    if (window.innerWidth < 768) {
+      setIsSidebarOpen(false);
+    }
   };
 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
@@ -184,24 +183,24 @@ export default function HomePage() {
     }
   };
 
-  const insertSymbol = (sym: string) => {
-    if (!textareaRef.current) {
-      setInput((prev) => prev + " $" + sym + "$ ");
+  const startRenameSession = (session: ChatSession, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setEditingSessionId(session.id);
+    setEditTitleInput(session.title);
+  };
+
+  const saveRenameSession = (sessionId: string) => {
+    const trimmed = editTitleInput.trim();
+    if (!trimmed) {
+      setEditingSessionId(null);
       return;
     }
-    const start = textareaRef.current.selectionStart;
-    const end = textareaRef.current.selectionEnd;
-    const text = input;
-    const inserted = `$${sym}$`;
-    const newText = text.substring(0, start) + inserted + text.substring(end);
-    setInput(newText);
-    setTimeout(() => {
-      textareaRef.current?.focus();
-      textareaRef.current?.setSelectionRange(
-        start + inserted.length,
-        start + inserted.length
-      );
-    }, 50);
+
+    const updated = sessions.map((s) =>
+      s.id === sessionId ? { ...s, title: trimmed, updatedAt: Date.now() } : s
+    );
+    saveSessions(updated);
+    setEditingSessionId(null);
   };
 
   const handleSendMessage = async (customPrompt?: string) => {
@@ -219,7 +218,7 @@ export default function HomePage() {
 
     const isFirstMessage = currentSession.messages.length === 0;
     const newTitle = isFirstMessage
-      ? promptToSend.slice(0, 32) + (promptToSend.length > 32 ? "..." : "")
+      ? promptToSend.slice(0, 36) + (promptToSend.length > 36 ? "..." : "")
       : currentSession.title;
 
     const assistantPlaceholderId = "msg-assistant-" + Date.now();
@@ -248,15 +247,16 @@ export default function HomePage() {
 
     if (!customPrompt) {
       setInput("");
+      if (textareaRef.current) {
+        textareaRef.current.style.height = "auto";
+      }
     }
     setIsStreaming(true);
 
-    // Call API with SSE streaming
     try {
       const controller = new AbortController();
       abortControllerRef.current = controller;
 
-      // Prepare context history (last 10 messages)
       const contextMessages = newMessages
         .slice(0, -1)
         .map((m) => ({ role: m.role, content: m.content }));
@@ -315,7 +315,6 @@ export default function HomePage() {
                 fullReasoning += delta.reasoning;
               }
 
-              // Update the assistant message in session
               setSessions((prev) =>
                 prev.map((s) => {
                   if (s.id !== currentSession.id) return s;
@@ -331,12 +330,11 @@ export default function HomePage() {
               );
             }
           } catch {
-            // Partial JSON line, continue
+            // Partial chunk
           }
         }
       }
 
-      // Persist final session state to localStorage
       setSessions((prev) => {
         const updated = prev.map((s) => {
           if (s.id !== currentSession.id) return s;
@@ -354,7 +352,7 @@ export default function HomePage() {
       });
     } catch (err: unknown) {
       if ((err as Error)?.name === "AbortController") {
-        // User stopped generation manually
+        // user aborted
       } else {
         const errorMessage =
           err instanceof Error
@@ -407,9 +405,7 @@ export default function HomePage() {
     const lines = [
       `# ${currentSession.title}`,
       `*Diekspor dari OceanAI - Platform AI Mahasiswa Teknik Kelautan*`,
-      `*Model: ${currentSession.model} | Tanggal: ${new Date().toLocaleString(
-        "id-ID"
-      )}*`,
+      `*Model: ${currentSession.model} | Tanggal: ${new Date().toLocaleString("id-ID")}*`,
       `\n---\n`,
     ];
 
@@ -430,428 +426,420 @@ export default function HomePage() {
     URL.revokeObjectURL(url);
   };
 
+  // Filter sessions by search query
+  const filteredSessions = sessions.filter((s) =>
+    s.title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
-    <div className="relative min-h-screen flex flex-col bg-[#050b14] text-slate-100 overflow-hidden">
-      {/* Ambient Ocean Glows */}
-      <div className="ocean-ambient-bg" />
-
-      {/* Main Top Navigation Bar */}
-      <header className="relative z-20 border-b border-white/[0.08] bg-[#07101e]/80 backdrop-blur-md px-4 py-2.5">
-        <div className="max-w-7xl mx-auto flex items-center justify-between gap-4">
-          {/* Logo & Mobile Menu Toggle */}
-          <div className="flex items-center gap-3">
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="md:hidden p-2 text-slate-300 hover:text-white rounded-lg bg-slate-900/60 border border-slate-800"
-              title="Menu"
-            >
-              {isSidebarOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-            </button>
-
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 text-white shadow-lg shadow-cyan-500/25">
-                <Anchor className="w-5 h-5" />
-              </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <h1 className="text-base font-extrabold tracking-tight text-white flex items-center gap-1.5">
-                    Ocean<span className="text-cyan-400">AI</span>
-                  </h1>
-                  <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-300 border border-cyan-500/30">
-                    Teknik Kelautan
-                  </span>
-                </div>
-                <p className="text-[10px] text-slate-400 hidden sm:block">
-                  Portal Belajar, Formula LaTeX & Hidrodinamika Lepas Pantai
-                </p>
-              </div>
+    <div className="min-h-screen flex bg-[#faf9f5] text-[#2d2b28] antialiased">
+      {/* Sidebar - Claude Style */}
+      <aside
+        className={`${
+          isSidebarOpen ? "w-64" : "w-0 -translate-x-full"
+        } md:translate-x-0 fixed md:static z-40 inset-y-0 left-0 bg-[#f5f4ef] border-r border-[#e8e6df] flex flex-col transition-all duration-200 overflow-hidden shrink-0`}
+      >
+        {/* Sidebar Header */}
+        <div className="p-3 pb-2 space-y-2">
+          <div className="flex items-center justify-between px-1">
+            <div className="flex items-center gap-2">
+              <span className="font-semibold text-sm tracking-tight text-[#1f1e1d]">
+                OceanAI
+              </span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#e8e5dc] text-stone-600 font-medium">
+                Teknik Kelautan
+              </span>
             </div>
+            <button
+              onClick={() => setIsSidebarOpen(false)}
+              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-md hover:bg-[#eae8e1] transition-colors"
+              title="Tutup sidebar"
+            >
+              <X className="w-4 h-4 md:hidden" />
+            </button>
           </div>
 
-          {/* Model Selector & Quick Actions */}
-          <div className="flex items-center gap-2 sm:gap-3">
-            <ModelSelector
-              selectedModel={selectedModel}
-              onSelectModel={handleSelectModel}
+          {/* New Chat Button Claude Style */}
+          <button
+            onClick={handleCreateNewChat}
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg bg-white border border-[#e8e6df] text-xs font-medium text-stone-800 hover:bg-[#faf9f7] hover:border-[#dedbd2] shadow-xs transition-colors"
+          >
+            <Plus className="w-4 h-4 text-stone-500" />
+            <span>Percakapan Baru</span>
+          </button>
+
+          {/* Search Box */}
+          <div className="relative">
+            <Search className="w-3.5 h-3.5 text-stone-400 absolute left-2.5 top-2.5 pointer-events-none" />
+            <input
+              type="text"
+              placeholder="Cari percakapan..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-8 pr-2 py-1.5 rounded-md bg-[#eae8e1]/60 border border-transparent hover:border-[#dedbd2] focus:bg-white focus:border-stone-300 focus:outline-none text-xs text-stone-800 placeholder-stone-400 transition-colors"
             />
+          </div>
+        </div>
 
-            <button
-              onClick={() => setIsFormulaQuickSheetOpen(true)}
-              className="hidden lg:flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900/80 hover:bg-slate-800 border border-slate-700/80 text-xs font-medium text-cyan-300 transition-colors shadow-sm"
-              title="Buku Rumus Inti"
-            >
-              <BookOpen className="w-3.5 h-3.5 text-cyan-400" />
-              <span>Buku Rumus</span>
-            </button>
+        {/* Sessions List */}
+        <div className="flex-1 overflow-y-auto px-2 py-1 space-y-0.5">
+          <div className="px-2 py-1.5 text-[10px] font-semibold text-stone-400 uppercase tracking-wider">
+            Riwayat Percakapan
+          </div>
 
-            <button
-              onClick={() => setIsFirebaseConfigOpen(true)}
-              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all ${
-                isFirebaseConfigured
-                  ? "bg-amber-500/10 border-amber-500/30 text-amber-300 hover:bg-amber-500/20"
-                  : "bg-slate-900/80 border-slate-700 text-slate-400 hover:text-cyan-300"
-              }`}
-              title="Konfigurasi Firebase"
-            >
+          {filteredSessions.map((s) => {
+            const isActive = s.id === currentSessionId;
+            const isEditing = editingSessionId === s.id;
+
+            return (
+              <div
+                key={s.id}
+                onClick={() => {
+                  if (!isEditing) {
+                    setCurrentSessionId(s.id);
+                    if (window.innerWidth < 768) {
+                      setIsSidebarOpen(false);
+                    }
+                  }
+                }}
+                className={`group flex items-center justify-between px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-colors ${
+                  isActive
+                    ? "bg-[#e5e2d8] text-[#1f1e1d] font-medium"
+                    : "text-stone-600 hover:bg-[#eceae3] hover:text-stone-900"
+                }`}
+              >
+                {isEditing ? (
+                  <div className="flex items-center gap-1.5 w-full" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      ref={renameInputRef}
+                      type="text"
+                      value={editTitleInput}
+                      onChange={(e) => setEditTitleInput(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") saveRenameSession(s.id);
+                        if (e.key === "Escape") setEditingSessionId(null);
+                      }}
+                      className="flex-1 bg-white border border-stone-300 rounded px-1.5 py-0.5 text-xs text-stone-900 focus:outline-none focus:border-amber-700"
+                    />
+                    <button
+                      onClick={() => saveRenameSession(s.id)}
+                      className="p-1 text-emerald-700 hover:text-emerald-900"
+                      title="Simpan nama"
+                    >
+                      <Check className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      onClick={() => setEditingSessionId(null)}
+                      className="p-1 text-stone-400 hover:text-stone-700"
+                      title="Batal"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <span className="truncate pr-2">{s.title}</span>
+                    <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 shrink-0 transition-opacity">
+                      <button
+                        onClick={(e) => startRenameSession(s, e)}
+                        className="p-1 text-stone-400 hover:text-stone-700 rounded hover:bg-[#dedbd2]"
+                        title="Ganti nama percakapan"
+                      >
+                        <Edit2 className="w-3 h-3" />
+                      </button>
+                      <button
+                        onClick={(e) => handleDeleteSession(s.id, e)}
+                        className="p-1 text-stone-400 hover:text-rose-600 rounded hover:bg-[#dedbd2]"
+                        title="Hapus percakapan"
+                      >
+                        <Trash2 className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Sidebar Footer Claude Style (User profile & Settings) */}
+        <div className="p-2 border-t border-[#e8e6df] space-y-1">
+          <button
+            onClick={() => setIsFirebaseConfigOpen(true)}
+            className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors"
+          >
+            <div className="flex items-center gap-2">
               <Flame
                 className={`w-3.5 h-3.5 ${
-                  isFirebaseConfigured ? "text-amber-400" : "text-slate-400"
+                  isFirebaseConfigured ? "text-amber-700" : "text-stone-400"
                 }`}
               />
-              <span className="hidden md:inline">
-                {isFirebaseConfigured ? "Firebase Terhubung" : "Firebase Setup"}
-              </span>
-            </button>
+              <span>Firebase Auth</span>
+            </div>
+            <span className="text-[10px] text-stone-400">
+              {isFirebaseConfigured ? "Aktif" : "Setup"}
+            </span>
+          </button>
 
-            {/* Auth Button */}
-            {user ? (
-              <div className="flex items-center gap-2 pl-2 border-l border-white/10">
-                <div className="text-right hidden sm:block">
-                  <div className="text-xs font-semibold text-white leading-tight">
+          <button
+            onClick={() => setIsDeploymentModalOpen(true)}
+            className="w-full flex items-center gap-2 px-2.5 py-1.5 rounded-lg text-xs text-stone-600 hover:bg-[#eae8e1] transition-colors"
+          >
+            <Cloud className="w-3.5 h-3.5 text-stone-500" />
+            <span>Deploy Vercel/Netlify</span>
+          </button>
+
+          {/* User Profile Pill Claude Style */}
+          {user ? (
+            <div className="flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg bg-[#eae8e1]/70 border border-[#dedbd2] text-xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <div className="w-6 h-6 rounded-full bg-stone-300 flex items-center justify-center font-medium text-stone-800 text-[11px] shrink-0">
+                  {(user.displayName || user.email || "M")[0].toUpperCase()}
+                </div>
+                <div className="truncate text-left leading-tight">
+                  <div className="font-semibold text-stone-800 truncate">
                     {user.displayName || "Mahasiswa"}
                   </div>
-                  <div className="text-[10px] text-cyan-300 font-mono">
-                    {user.isDemo ? "Mode Demo" : "Mahasiswa Aktif"}
+                  <div className="text-[10px] text-stone-500">
+                    {user.isDemo ? "Mode Demo" : "Firebase User"}
                   </div>
                 </div>
+              </div>
+              <button
+                onClick={() => signOut()}
+                className="p-1 text-stone-400 hover:text-stone-700 rounded"
+                title="Keluar"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={() => setIsAuthModalOpen(true)}
+              className="w-full flex items-center justify-center gap-2 px-3 py-2 mt-1 rounded-lg bg-stone-800 text-white text-xs font-medium hover:bg-stone-900 transition-colors"
+            >
+              <LogIn className="w-3.5 h-3.5" />
+              <span>Masuk / Daftar</span>
+            </button>
+          )}
+        </div>
+      </aside>
+
+      {/* Main Chat Canvas */}
+      <div className="flex-1 flex flex-col min-w-0 h-screen">
+        {/* Top Header - Claude Style */}
+        <header className="h-12 border-b border-[#e8e6df] bg-[#faf9f5] flex items-center justify-between px-4 shrink-0 z-10">
+          <div className="flex items-center gap-2.5 min-w-0">
+            {!isSidebarOpen && (
+              <button
+                onClick={() => setIsSidebarOpen(true)}
+                className="p-1.5 text-stone-500 hover:text-stone-800 rounded-md hover:bg-[#eae8e1] transition-colors"
+                title="Buka sidebar"
+              >
+                <Menu className="w-4 h-4" />
+              </button>
+            )}
+
+            {/* Editable Conversation Title in Header */}
+            {currentSession && editingSessionId === currentSession.id ? (
+              <div className="flex items-center gap-1">
+                <input
+                  ref={renameInputRef}
+                  type="text"
+                  value={editTitleInput}
+                  onChange={(e) => setEditTitleInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveRenameSession(currentSession.id);
+                    if (e.key === "Escape") setEditingSessionId(null);
+                  }}
+                  className="bg-white border border-stone-300 rounded px-2 py-0.5 text-xs font-semibold text-stone-800 focus:outline-none"
+                />
                 <button
-                  onClick={() => signOut()}
-                  className="p-1.5 text-slate-400 hover:text-rose-400 rounded-lg hover:bg-slate-800 transition-colors"
-                  title="Keluar"
+                  onClick={() => saveRenameSession(currentSession.id)}
+                  className="p-1 text-emerald-700 hover:text-emerald-900"
                 >
-                  <LogOut className="w-4 h-4" />
+                  <Check className="w-3.5 h-3.5" />
                 </button>
               </div>
             ) : (
-              <button
-                onClick={() => setIsAuthModalOpen(true)}
-                className="ocean-btn-primary px-3.5 py-1.5 text-xs flex items-center gap-1.5"
-              >
-                <LogIn className="w-3.5 h-3.5" />
-                <span>Masuk Mahasiswa</span>
-              </button>
+              <div className="flex items-center gap-1.5 group cursor-pointer" onClick={() => currentSession && startRenameSession(currentSession)}>
+                <h2 className="text-sm font-semibold text-stone-800 truncate max-w-sm sm:max-w-md">
+                  {currentSession?.title || "Percakapan Baru"}
+                </h2>
+                <Edit2 className="w-3 h-3 text-stone-400 group-hover:text-stone-700 opacity-60 group-hover:opacity-100 transition-opacity" />
+              </div>
             )}
           </div>
-        </div>
-      </header>
 
-      {/* Main Workspace: Sidebar + Chat Area */}
-      <div className="relative z-10 flex-1 flex overflow-hidden">
-        {/* Left Sidebar (Sessions & Topics) */}
-        <aside
-          className={`fixed md:relative z-30 inset-y-0 left-0 w-72 bg-[#060e1b]/95 backdrop-blur-xl border-r border-white/[0.08] flex flex-col transition-transform duration-300 ${
-            isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
-          }`}
-        >
-          {/* New Chat Button */}
-          <div className="p-3 border-b border-white/[0.06]">
-            <button
-              onClick={handleCreateNewChat}
-              className="w-full ocean-btn-primary py-2.5 text-xs flex items-center justify-center gap-2"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Percakapan Baru</span>
-            </button>
-          </div>
-
-          {/* Session List */}
-          <div className="flex-1 overflow-y-auto p-2 space-y-1">
-            <div className="px-2 py-1.5 text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
-              Riwayat Diskusi Kelautan
-            </div>
-
-            {sessions.map((s) => {
-              const isActive = s.id === currentSessionId;
-              return (
-                <div
-                  key={s.id}
-                  onClick={() => {
-                    setCurrentSessionId(s.id);
-                    setIsSidebarOpen(false);
-                  }}
-                  className={`group flex items-center justify-between p-2 rounded-xl text-xs cursor-pointer transition-all ${
-                    isActive
-                      ? "bg-cyan-500/15 border border-cyan-500/40 text-cyan-200"
-                      : "text-slate-300 hover:bg-slate-900/60 border border-transparent"
-                  }`}
-                >
-                  <div className="flex items-center gap-2 min-w-0 pr-2">
-                    <MessageSquare
-                      className={`w-3.5 h-3.5 shrink-0 ${
-                        isActive ? "text-cyan-400" : "text-slate-500"
-                      }`}
-                    />
-                    <span className="truncate font-medium">{s.title}</span>
-                  </div>
-                  <button
-                    onClick={(e) => handleDeleteSession(s.id, e)}
-                    className="opacity-0 group-hover:opacity-100 p-1 text-slate-400 hover:text-rose-400 transition-opacity"
-                    title="Hapus sesi"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Sidebar Footer Shortcuts */}
-          <div className="p-3 border-t border-white/[0.06] space-y-1.5 text-xs">
-            <button
-              onClick={() => {
-                setIsFormulaQuickSheetOpen(true);
-                setIsSidebarOpen(false);
-              }}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-300 hover:bg-slate-900/80 transition-colors"
-            >
-              <BookOpen className="w-4 h-4 text-cyan-400" />
-              <span>Buku Rumus Kelautan</span>
-            </button>
+          {/* Right Header: Model Selector & Export */}
+          <div className="flex items-center gap-2">
+            <ModelSelector
+              selectedModel={selectedModel}
+              onSelectModel={handleSelectModel}
+              direction="down"
+            />
 
             <button
-              onClick={() => {
-                setIsDeploymentModalOpen(true);
-                setIsSidebarOpen(false);
-              }}
-              className="w-full flex items-center gap-2 px-2.5 py-2 rounded-lg text-slate-300 hover:bg-slate-900/80 transition-colors"
+              onClick={handleExportMarkdown}
+              disabled={!currentSession || currentSession.messages.length === 0}
+              className="p-1.5 text-stone-400 hover:text-stone-700 rounded-md hover:bg-[#eae8e1] transition-colors disabled:opacity-40"
+              title="Ekspor ke Markdown"
             >
-              <Cloud className="w-4 h-4 text-cyan-400" />
-              <span>Panduan Vercel / Netlify</span>
+              <Download className="w-4 h-4" />
             </button>
-
-            <div className="pt-2 border-t border-white/[0.06] text-[11px] text-slate-500 flex items-center justify-between px-1">
-              <span>Endpoint: Mecutinai.com</span>
-              <span className="text-emerald-400 font-mono text-[10px]">● Online</span>
-            </div>
           </div>
-        </aside>
+        </header>
 
-        {/* Mobile backdrop for sidebar */}
-        {isSidebarOpen && (
-          <div
-            onClick={() => setIsSidebarOpen(false)}
-            className="fixed inset-0 bg-black/60 z-20 md:hidden backdrop-blur-sm"
-          />
-        )}
-
-        {/* Main Chat Canvas */}
-        <main className="flex-1 flex flex-col min-w-0 bg-[#050b14]/50">
-          {/* Top Session Subheader */}
-          <div className="px-4 py-2 border-b border-white/[0.06] bg-[#07101e]/40 flex items-center justify-between text-xs text-slate-400">
-            <div className="flex items-center gap-2 truncate">
-              <span className="font-semibold text-slate-200 truncate">
-                {currentSession?.title || "Percakapan Baru"}
-              </span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-mono">
-                {currentSession?.model || selectedModel}
-              </span>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleExportMarkdown}
-                disabled={!currentSession || currentSession.messages.length === 0}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-cyan-300 hover:bg-slate-800/80 transition-colors disabled:opacity-40"
-                title="Ekspor Percakapan (.md)"
-              >
-                <Download className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Messages Stream Container */}
-          <div className="flex-1 overflow-y-auto p-4 md:p-6 space-y-6">
-            {(!currentSession || currentSession.messages.length === 0) ? (
-              <div className="flex flex-col items-center justify-center min-h-[70vh] text-center max-w-3xl mx-auto py-8">
-                <div className="p-4 rounded-2xl bg-cyan-500/10 text-cyan-400 border border-cyan-500/25 mb-4 shadow-xl shadow-cyan-500/10">
-                  <Waves className="w-10 h-10 animate-pulse" />
-                </div>
-
-                <h2 className="text-2xl md:text-3xl font-extrabold text-white tracking-tight mb-2">
-                  Selamat Datang di <span className="text-cyan-400">OceanAI</span>
-                </h2>
-                <p className="text-sm text-slate-300 max-w-xl mb-6 leading-relaxed">
-                  Platform AI cerdas untuk mahasiswa <strong>Teknik Kelautan</strong>.
-                  Dilengkapi konversi instan formula LaTeX matematis, analisis gelombang laut,
-                  beban hidrodinamika Morison, arsitektur perkapalan, dan simulasi numerik.
-                </p>
-
-                {/* Popular Topics Quick Prompts */}
-                <OceanTopicCards
-                  onSelectPrompt={(prompt) => handleSendMessage(prompt)}
-                />
+        {/* Message Stream */}
+        <div className="flex-1 overflow-y-auto px-4 md:px-8 py-6 space-y-6">
+          {(!currentSession || currentSession.messages.length === 0) ? (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] max-w-2xl mx-auto text-center py-12">
+              <div className="w-12 h-12 rounded-2xl bg-[#f0eee6] border border-[#e8e6df] flex items-center justify-center mb-4 text-[#c2613a]">
+                <Sparkles className="w-6 h-6" />
               </div>
-            ) : (
-              <div className="max-w-4xl mx-auto space-y-6">
-                {currentSession.messages.map((message) => {
-                  const isUser = message.role === "user";
+              <h2 className="text-2xl font-serif font-bold text-[#1f1e1d] tracking-tight mb-2">
+                OceanAI untuk Teknik Kelautan
+              </h2>
+              <p className="text-sm text-stone-600 max-w-md mb-8 leading-relaxed">
+                Asisten komprehensif untuk menurunkan formula gelombang laut, beban hidrodinamika, stabilitas kapal, dan komputasi numerik.
+              </p>
 
-                  return (
-                    <div
-                      key={message.id}
-                      className={`flex gap-3 md:gap-4 ${
-                        isUser ? "justify-end" : "justify-start"
-                      }`}
-                    >
-                      {!isUser && (
-                        <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-cyan-600 to-blue-700 flex items-center justify-center text-white shrink-0 shadow-md shadow-cyan-500/20 border border-cyan-400/30">
-                          <Anchor className="w-4 h-4" />
-                        </div>
-                      )}
+              {/* Minimal Clean Prompts */}
+              <OceanTopicCards
+                onSelectPrompt={(prompt) => handleSendMessage(prompt)}
+              />
+            </div>
+          ) : (
+            <div className="max-w-3xl mx-auto space-y-6 pb-4">
+              {currentSession.messages.map((message) => {
+                const isUser = message.role === "user";
 
-                      <div
-                        className={`group relative max-w-[88%] md:max-w-[80%] rounded-2xl p-4 text-sm transition-all ${
-                          isUser
-                            ? "bg-gradient-to-r from-blue-700/80 to-cyan-700/80 text-white rounded-tr-sm border border-cyan-500/30 shadow-lg shadow-cyan-900/20"
-                            : "ocean-glass-card rounded-tl-sm text-slate-100 shadow-xl"
-                        }`}
-                      >
-                        {/* Header inside assistant message */}
-                        {!isUser && (
-                          <div className="flex items-center justify-between pb-2 mb-2 border-b border-white/[0.08] text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="font-semibold text-cyan-300">OceanAI</span>
-                              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-slate-900/80 text-slate-300 border border-slate-700">
-                                {message.model || selectedModel}
-                              </span>
-                            </div>
-                            <button
-                              onClick={() =>
-                                handleCopyMessage(message.id, message.content)
-                              }
-                              className="p-1 rounded text-slate-400 hover:text-cyan-300 hover:bg-slate-800/60 transition-colors"
-                              title="Salin Pesan"
-                            >
-                              {copiedId === message.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-400" />
-                              ) : (
-                                <Copy className="w-3.5 h-3.5" />
-                              )}
-                            </button>
-                          </div>
-                        )}
-
-                        {/* Collapsible Reasoning / Thinking Box */}
-                        {!isUser && message.reasoning && (
-                          <details className="mb-3 rounded-lg bg-slate-950/70 border border-cyan-500/20 text-xs overflow-hidden">
-                            <summary className="px-3 py-2 text-cyan-300 cursor-pointer font-medium flex items-center gap-1.5 hover:bg-cyan-500/5 select-none">
-                              <Brain className="w-3.5 h-3.5 text-cyan-400" />
-                              <span>Lihat Proses Berpikir & Penurunan Formula...</span>
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex ${isUser ? "justify-end" : "justify-start"}`}
+                  >
+                    {isUser ? (
+                      /* User message Claude Style */
+                      <div className="max-w-[85%] rounded-2xl px-5 py-3.5 bg-[#f0eee6] text-[#1f1e1d] text-sm leading-relaxed border border-[#e5e3dc] shadow-2xs">
+                        <div className="whitespace-pre-wrap">{message.content}</div>
+                      </div>
+                    ) : (
+                      /* Assistant message Claude Style - no loud border, sits directly on page */
+                      <div className="w-full text-sm leading-relaxed text-[#2d2b28]">
+                        {/* Thinking / Reasoning collapsible */}
+                        {message.reasoning && (
+                          <details className="mb-3 rounded-lg bg-[#f7f5ef] border border-[#e8e6df] text-xs">
+                            <summary className="px-3 py-2 text-stone-600 cursor-pointer font-medium flex items-center gap-1.5 hover:text-stone-900 select-none">
+                              <Brain className="w-3.5 h-3.5 text-[#c2613a]" />
+                              <span>Lihat proses penurunan matematis & penalaran...</span>
                             </summary>
-                            <div className="p-3 text-slate-400 border-t border-slate-800 text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
+                            <div className="p-3 text-stone-600 border-t border-[#e8e6df] text-[11px] font-mono whitespace-pre-wrap leading-relaxed max-h-60 overflow-y-auto">
                               {message.reasoning}
                             </div>
                           </details>
                         )}
 
-                        {/* Message Content rendered with KaTeX & Markdown */}
-                        {isUser ? (
-                          <div className="whitespace-pre-wrap leading-relaxed">
-                            {message.content}
-                          </div>
-                        ) : (
-                          <div>
-                            {message.content ? (
-                              <LatexMarkdownRenderer content={message.content} />
-                            ) : (
-                              <div className="flex items-center gap-2 text-cyan-300 py-1">
-                                <span className="animate-spin text-base">⚙️</span>
-                                <span className="text-xs italic">
-                                  Menurunkan formula & menganalisis teori kelautan...
-                                </span>
-                              </div>
-                            )}
+                        {/* Content rendered with KaTeX */}
+                        <div>
+                          {message.content ? (
+                            <LatexMarkdownRenderer content={message.content} />
+                          ) : (
+                            <div className="flex items-center gap-2 text-stone-500 py-2">
+                              <span className="inline-block w-2 h-2 rounded-full bg-[#c2613a] animate-ping" />
+                              <span className="text-xs italic">
+                                Menyusun analisis & formula kelautan...
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Minimal message footer action */}
+                        {message.content && (
+                          <div className="flex items-center gap-2 mt-2 pt-1 text-xs text-stone-400">
+                            <button
+                              onClick={() => handleCopyMessage(message.id, message.content)}
+                              className="p-1 hover:text-stone-700 transition-colors"
+                              title="Salin respon"
+                            >
+                              {copiedId === message.id ? (
+                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                              ) : (
+                                <Copy className="w-3.5 h-3.5" />
+                              )}
+                            </button>
+                            <span className="text-[11px] font-mono">
+                              {message.model || selectedModel}
+                            </span>
                           </div>
                         )}
                       </div>
+                    )}
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef} />
+            </div>
+          )}
+        </div>
 
-                      {isUser && (
-                        <div className="w-8 h-8 rounded-xl bg-slate-800 flex items-center justify-center text-slate-300 shrink-0 border border-slate-700">
-                          <UserIcon className="w-4 h-4" />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-                <div ref={messagesEndRef} />
-              </div>
-            )}
-          </div>
+        {/* Input Box - Claude Style Floating Card */}
+        <div className="p-4 bg-[#faf9f5] shrink-0">
+          <div className="max-w-3xl mx-auto">
+            <div className="relative bg-white border border-[#dedbd2] rounded-2xl shadow-xs focus-within:border-stone-400 focus-within:shadow-md transition-all p-3">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !e.shiftKey) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
+                rows={2}
+                placeholder="Tanyakan analisis gelombang, persamaan Morison, atau koding Python..."
+                className="w-full bg-transparent border-0 text-sm text-[#1f1e1d] placeholder-stone-400 focus:outline-none resize-none px-1 max-h-36 leading-relaxed"
+              />
 
-          {/* Bottom Chat Input Form */}
-          <div className="p-3 md:p-4 border-t border-white/[0.08] bg-[#07101e]/90 backdrop-blur-md">
-            <div className="max-w-4xl mx-auto space-y-2">
-              {/* Quick Math Symbols Palette Bar */}
-              <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
-                <span className="text-[10px] text-slate-400 font-mono uppercase shrink-0 mr-1 flex items-center gap-1">
-                  <Sparkles className="w-3 h-3 text-cyan-400" /> Simbol Cepat:
+              {/* Bottom bar of Claude's input box */}
+              <div className="flex items-center justify-between pt-2 border-t border-[#f4f2ec] text-xs">
+                <span className="text-[11px] text-stone-400 select-none">
+                  OceanAI dapat membuat kesalahan. Verifikasi rumus penting.
                 </span>
-                {MATH_SYMBOLS.map((s, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => insertSymbol(s.insert)}
-                    className="math-symbol-btn shrink-0"
-                    title={`Sisipkan ${s.label}`}
-                  >
-                    ${s.label}$
-                  </button>
-                ))}
-              </div>
 
-              {/* Input Box */}
-              <div className="relative flex items-end gap-2 bg-[#091322] border border-cyan-500/25 rounded-2xl p-2 shadow-2xl focus-within:border-cyan-400 focus-within:ring-2 focus-within:ring-cyan-500/20 transition-all">
-                <textarea
-                  ref={textareaRef}
-                  value={input}
-                  onChange={(e) => setInput(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === "Enter" && !e.shiftKey) {
-                      e.preventDefault();
-                      handleSendMessage();
-                    }
-                  }}
-                  rows={2}
-                  placeholder="Tanyakan rumus dispersi Airy, gaya Morison, stabilitas kapal, atau koding Python..."
-                  className="flex-1 bg-transparent border-0 text-sm text-slate-100 placeholder-slate-500 focus:outline-none resize-none px-2 py-1 max-h-32"
-                />
+                <div className="flex items-center gap-2">
+                  <ModelSelector
+                    selectedModel={selectedModel}
+                    onSelectModel={handleSelectModel}
+                    direction="up"
+                  />
 
-                <div className="flex items-center gap-1 shrink-0 pb-1">
                   {isStreaming ? (
                     <button
                       type="button"
                       onClick={handleStopStreaming}
-                      className="p-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white transition-colors"
-                      title="Hentikan respons"
+                      className="w-7 h-7 rounded-full bg-stone-800 text-white flex items-center justify-center hover:bg-stone-900 transition-colors shrink-0"
+                      title="Hentikan"
                     >
-                      <StopCircle className="w-4 h-4" />
+                      <StopCircle className="w-3.5 h-3.5" />
                     </button>
                   ) : (
                     <button
                       type="button"
                       disabled={!input.trim()}
                       onClick={() => handleSendMessage()}
-                      className="p-2.5 rounded-xl ocean-btn-primary disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+                      className="w-7 h-7 rounded-full bg-[#c2613a] text-white flex items-center justify-center disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#b0532f] transition-colors shrink-0"
                       title="Kirim (Enter)"
                     >
-                      <Send className="w-4 h-4" />
+                      <ArrowUp className="w-4 h-4" />
                     </button>
                   )}
                 </div>
               </div>
-
-              {/* Footer Note */}
-              <div className="flex items-center justify-between text-[11px] text-slate-400 px-1">
-                <span>
-                  Tekan <kbd className="font-mono text-cyan-300">Enter</kbd> untuk kirim, <kbd className="font-mono text-cyan-300">Shift+Enter</kbd> untuk baris baru.
-                </span>
-                <span className="hidden sm:inline">
-                  LaTeX rendered otomatis via KaTeX 📐
-                </span>
-              </div>
             </div>
           </div>
-        </main>
+        </div>
       </div>
 
       {/* Modals */}
@@ -864,12 +852,6 @@ export default function HomePage() {
       <FirebaseConfigModal
         isOpen={isFirebaseConfigOpen}
         onClose={() => setIsFirebaseConfigOpen(false)}
-      />
-
-      <FormulaQuickSheet
-        isOpen={isFormulaQuickSheetOpen}
-        onClose={() => setIsFormulaQuickSheetOpen(false)}
-        onAskFormula={(prompt) => handleSendMessage(prompt)}
       />
 
       <DeploymentModal

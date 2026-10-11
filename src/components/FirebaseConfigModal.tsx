@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { X, Flame, Check, AlertCircle, Copy, ExternalLink, HelpCircle } from "lucide-react";
+import { X, Check, AlertCircle, Copy, ExternalLink, HelpCircle } from "lucide-react";
 import {
   getActiveFirebaseConfig,
   saveFirebaseConfig,
@@ -42,13 +42,11 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
 
   const handleJsonPaste = () => {
     try {
-      // Try cleaning JS object notation or JSON
       let cleaned = rawJson.trim();
       if (cleaned.startsWith("const firebaseConfig =")) {
         cleaned = cleaned.replace("const firebaseConfig =", "").replace(/;$/, "").trim();
       }
-      // If object keys lack double quotes:
-      // Simple regex to parse standard Firebase console format
+
       const extract = (key: string) => {
         const match = cleaned.match(new RegExp(`${key}\\s*:\\s*["']([^"']+)["']`));
         return match ? match[1] : "";
@@ -81,7 +79,7 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
     } catch {
       setStatusMsg({
         type: "error",
-        text: "Gagal memproses JSON. Harap masukkan nilai secara manual di kolom bawah.",
+        text: "Gagal memproses JSON. Harap masukkan nilai secara manual di kolom.",
       });
     }
   };
@@ -100,7 +98,7 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
     reloadConfig();
     setStatusMsg({
       type: "success",
-      text: "Konfigurasi Firebase berhasil disimpan! Autentikasi Firebase sekarang aktif.",
+      text: "Konfigurasi Firebase berhasil disimpan!",
     });
     setTimeout(() => {
       onClose();
@@ -120,44 +118,43 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
     reloadConfig();
     setStatusMsg({
       type: "success",
-      text: "Konfigurasi Firebase telah dihapus (kembali ke Mode Demo).",
+      text: "Kembali ke Mode Demo (Firebase dinonaktifkan).",
     });
   };
 
   return (
-    <div className="ocean-modal-backdrop">
-      <div className="ocean-modal-card max-w-xl">
-        <div className="ocean-modal-header">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              <Flame className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                Konfigurasi Firebase Auth
-                {isFirebaseConfigured && (
-                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/40">
-                    Aktif
-                  </span>
-                )}
-              </h3>
-              <p className="text-xs text-slate-400">
-                Hubungkan proyek Firebase Anda untuk login email & password mahasiswa.
-              </p>
-            </div>
+    <div className="claude-modal-backdrop">
+      <div className="claude-modal-card max-w-lg">
+        <div className="claude-modal-header">
+          <div>
+            <h3 className="text-base font-bold text-stone-900 flex items-center gap-2">
+              Konfigurasi Firebase Auth
+              {isFirebaseConfigured && (
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-medium">
+                  Aktif
+                </span>
+              )}
+            </h3>
+            <p className="text-xs text-stone-500 mt-0.5">
+              Hubungkan akun Firebase Console untuk otentikasi email dan kata sandi.
+            </p>
           </div>
-          <button onClick={onClose} className="ocean-modal-close-btn" title="Tutup">
-            <X className="w-5 h-5" />
+          <button
+            onClick={onClose}
+            className="p-1.5 rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 transition-colors"
+            title="Tutup"
+          >
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        <div className="p-6 space-y-5 max-h-[75vh] overflow-y-auto">
+        <div className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
           {statusMsg && (
             <div
               className={`p-3 rounded-lg text-xs flex items-center gap-2 ${
                 statusMsg.type === "success"
-                  ? "bg-emerald-500/15 border border-emerald-500/30 text-emerald-300"
-                  : "bg-rose-500/15 border border-rose-500/30 text-rose-300"
+                  ? "bg-emerald-50 border border-emerald-200 text-emerald-700"
+                  : "bg-rose-50 border border-rose-200 text-rose-700"
               }`}
             >
               {statusMsg.type === "success" ? (
@@ -169,120 +166,120 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
             </div>
           )}
 
-          <div className="bg-slate-900/60 p-4 rounded-xl border border-slate-700/60 space-y-3">
+          <div className="bg-stone-50 p-3.5 rounded-xl border border-stone-200/80 space-y-2">
             <div className="flex items-center justify-between text-xs">
-              <span className="font-semibold text-cyan-300 flex items-center gap-1.5">
-                <Copy className="w-3.5 h-3.5" /> Quick Paste dari Firebase Console
+              <span className="font-medium text-stone-700 flex items-center gap-1.5">
+                <Copy className="w-3.5 h-3.5" /> Tempel dari Firebase Console
               </span>
               <a
                 href="https://console.firebase.google.com"
                 target="_blank"
                 rel="noreferrer"
-                className="text-cyan-400 hover:text-cyan-300 flex items-center gap-1 text-[11px]"
+                className="text-amber-800 hover:text-amber-900 flex items-center gap-1 text-[11px]"
               >
-                Buka Firebase Console <ExternalLink className="w-3 h-3" />
+                Buka Console <ExternalLink className="w-3 h-3" />
               </a>
             </div>
             <textarea
-              className="w-full bg-slate-950/80 border border-slate-700 rounded-lg p-2.5 text-xs font-mono text-slate-200 focus:outline-none focus:border-cyan-400"
+              className="w-full bg-white border border-stone-200 rounded-lg p-2 text-xs font-mono text-stone-800 focus:outline-none focus:border-amber-700"
               rows={3}
-              placeholder={'const firebaseConfig = {\n  apiKey: "AIzaSy...",\n  authDomain: "proyek.firebaseapp.com",\n  projectId: "proyek-id",\n  ...\n};'}
+              placeholder={'const firebaseConfig = {\n  apiKey: "AIzaSy...",\n  projectId: "proyek-id",\n  ...\n};'}
               value={rawJson}
               onChange={(e) => setRawJson(e.target.value)}
             />
             <button
               type="button"
               onClick={handleJsonPaste}
-              className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-medium transition-colors"
+              className="px-2.5 py-1 bg-stone-200 hover:bg-stone-300 text-stone-800 rounded-md text-xs font-medium transition-colors"
             >
-              Terapkan Kode Di Atas ke Formulir
+              Ekstrak ke Formulir
             </button>
           </div>
 
           <form onSubmit={handleSave} className="space-y-3 text-xs">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">API Key *</label>
+                <label className="block text-stone-700 mb-1 font-medium">API Key *</label>
                 <input
                   type="text"
                   required
                   placeholder="AIzaSy..."
                   value={config.apiKey}
                   onChange={(e) => setConfig({ ...config, apiKey: e.target.value })}
-                  className="ocean-input"
+                  className="claude-input"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Auth Domain</label>
+                <label className="block text-stone-700 mb-1 font-medium">Auth Domain</label>
                 <input
                   type="text"
                   placeholder="proyek.firebaseapp.com"
                   value={config.authDomain}
                   onChange={(e) => setConfig({ ...config, authDomain: e.target.value })}
-                  className="ocean-input"
+                  className="claude-input"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Project ID *</label>
+                <label className="block text-stone-700 mb-1 font-medium">Project ID *</label>
                 <input
                   type="text"
                   required
-                  placeholder="kelautan-jaya-ai"
+                  placeholder="kelautan-jaya"
                   value={config.projectId}
                   onChange={(e) => setConfig({ ...config, projectId: e.target.value })}
-                  className="ocean-input"
+                  className="claude-input"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Storage Bucket</label>
+                <label className="block text-stone-700 mb-1 font-medium">Storage Bucket</label>
                 <input
                   type="text"
                   placeholder="proyek.appspot.com"
                   value={config.storageBucket}
                   onChange={(e) => setConfig({ ...config, storageBucket: e.target.value })}
-                  className="ocean-input"
+                  className="claude-input"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">Messaging Sender ID</label>
+                <label className="block text-stone-700 mb-1 font-medium">Messaging Sender ID</label>
                 <input
                   type="text"
                   placeholder="1029384756"
                   value={config.messagingSenderId}
                   onChange={(e) => setConfig({ ...config, messagingSenderId: e.target.value })}
-                  className="ocean-input"
+                  className="claude-input"
                 />
               </div>
 
               <div>
-                <label className="block text-slate-300 mb-1 font-medium">App ID</label>
+                <label className="block text-stone-700 mb-1 font-medium">App ID</label>
                 <input
                   type="text"
                   placeholder="1:1029384:web:ab987c"
                   value={config.appId}
                   onChange={(e) => setConfig({ ...config, appId: e.target.value })}
-                  className="ocean-input"
+                  className="claude-input"
                 />
               </div>
             </div>
 
-            <div className="pt-2 text-[11px] text-slate-400 flex items-start gap-1.5">
-              <HelpCircle className="w-3.5 h-3.5 text-cyan-400 shrink-0 mt-0.5" />
+            <div className="pt-2 text-[11px] text-stone-500 flex items-start gap-1.5">
+              <HelpCircle className="w-3.5 h-3.5 text-stone-400 shrink-0 mt-0.5" />
               <span>
-                Pengaturan ini disimpan di peramban Anda. Anda juga bisa menaruhnya secara permanen di file{" "}
-                <code className="text-cyan-300">.env.local</code> atau Environment Variables Vercel/Netlify.
+                Pengaturan disimpan di browser. Anda juga bisa menaruhnya secara permanen di file{" "}
+                <code>.env.local</code>.
               </span>
             </div>
 
-            <div className="flex items-center justify-between pt-3 border-t border-slate-700/60">
+            <div className="flex items-center justify-between pt-3 border-t border-stone-200">
               <button
                 type="button"
                 onClick={handleReset}
-                className="px-3 py-1.5 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10 rounded-lg transition-colors"
+                className="px-2.5 py-1 text-rose-700 hover:bg-rose-50 rounded-md transition-colors text-xs"
               >
                 Reset ke Demo
               </button>
@@ -291,13 +288,13 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
                 <button
                   type="button"
                   onClick={onClose}
-                  className="px-4 py-2 rounded-xl text-slate-300 hover:bg-slate-800 transition-colors"
+                  className="claude-btn-secondary text-xs"
                 >
                   Batal
                 </button>
                 <button
                   type="submit"
-                  className="ocean-btn-primary px-5 py-2"
+                  className="claude-btn-primary text-xs"
                 >
                   Simpan Konfigurasi
                 </button>

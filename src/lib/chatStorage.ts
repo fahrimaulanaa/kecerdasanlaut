@@ -55,6 +55,10 @@ function normalizeAttachments(raw: unknown): ChatAttachment[] | undefined {
       kind: item.kind === "image" ? "image" : "document",
       extractedText:
         typeof item.extractedText === "string" ? item.extractedText : undefined,
+      storagePath:
+        typeof item.storagePath === "string" ? item.storagePath : undefined,
+      downloadUrl:
+        typeof item.downloadUrl === "string" ? item.downloadUrl : undefined,
       };
     });
   return attachments.length ? attachments : undefined;

@@ -7,6 +7,8 @@ export interface ChatAttachment {
   size: number;
   kind: ChatAttachmentKind;
   extractedText?: string;
+  storagePath?: string;
+  downloadUrl?: string;
   /** Hanya di memori UI; tidak disimpan ke localStorage/Firestore. */
   dataUrl?: string;
 }
@@ -207,25 +209,53 @@ async function parseOnServer(file: File): Promise<ChatAttachment> {
   };
 }
 
-export async function readLocalFile(file: File): Promise<ChatAttachment> {
+async function uploadToStorage(file: File, userId: string): Promise<Pick<ChatAttachment, "storagePath" | "downloadUrl">> {
+  const form = new FormData();
+  form.append("file", file);
+  form.append("userId", userId);
+  const res = await fetch("/api/files/upload", {
+    method: "POST",
+    body: form,
+  });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || typeof data.storagePath !== "string") {
+    throw new Error(data.error || `Gagal menyimpan ${file.name} ke penyimpanan.`);
+  }
+  return {
+    storagePath: data.storagePath,
+    downloadUrl:
+      typeof data.downloadUrl === "string" ? data.downloadUrl : undefined,
+  };
+}
+
+export async function readLocalFile(
+  file: File,
+  userId = "guest"
+): Promise<ChatAttachment> {
   if (file.size > MAX_FILE_BYTES) {
     throw new Error(`${file.name} melebihi batas 8 MB.`);
   }
 
   if (isImageFile(file)) {
     const compressed = await compressImage(file);
+    const stored = await uploadToStorage(file, userId);
     return {
       id: "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
       name: file.name,
       mimeType: compressed.mimeType,
       size: file.size,
       kind: "image",
+      ...stored,
       dataUrl: compressed.dataUrl,
     };
   }
 
   if (needsServerParse(file)) {
-    return parseOnServer(file);
+    const parsed = await parseOnServer(file);
+    if (isPdfFile(file)) {
+      return { ...parsed, ...(await uploadToStorage(file, userId)) };
+    }
+    return parsed;
   }
 
   if (isTextFile(file)) {

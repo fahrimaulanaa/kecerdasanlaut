@@ -5,6 +5,7 @@ import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
+import katex from "katex";
 import { Copy, Check } from "lucide-react";
 import "katex/dist/katex.min.css";
 
@@ -34,6 +35,61 @@ function normalizeLatex(text: string): string {
   });
 
   return text;
+}
+
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+function latexToMathml(latex: string, displayMode: boolean): string {
+  try {
+    return katex.renderToString(latex.trim(), {
+      displayMode,
+      output: "mathml",
+      throwOnError: false,
+      strict: false,
+    });
+  } catch {
+    return `<code>${escapeHtml(latex)}</code>`;
+  }
+}
+
+/**
+ * Writes HTML MathML to the clipboard. Microsoft Word recognizes MathML in
+ * HTML clipboard data and converts it into a native editable equation.
+ */
+export async function copyLatexAsEquation(text: string): Promise<void> {
+  const normalized = normalizeLatex(text);
+  const mathPattern = /(\$\$([\s\S]*?)\$\$|\$([^$\n]+)\$)/g;
+  let html = "";
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  while ((match = mathPattern.exec(normalized)) !== null) {
+    html += escapeHtml(normalized.slice(lastIndex, match.index))
+      .replace(/\n/g, "<br>");
+    const displayMode = match[1].startsWith("$$");
+    html += latexToMathml(displayMode ? match[2] : match[3], displayMode);
+    lastIndex = match.index + match[1].length;
+  }
+  html += escapeHtml(normalized.slice(lastIndex)).replace(/\n/g, "<br>");
+
+  if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+    await navigator.clipboard.write([
+      new ClipboardItem({
+        "text/html": new Blob([`<div>${html}</div>`], { type: "text/html" }),
+        "text/plain": new Blob([text], { type: "text/plain" }),
+      }),
+    ]);
+    return;
+  }
+
+  await navigator.clipboard.writeText(text);
 }
 
 function CodeBlock({

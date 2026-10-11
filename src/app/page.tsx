@@ -23,7 +23,10 @@ import {
   Loader2,
 } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
-import { LatexMarkdownRenderer } from "@/components/LatexMarkdownRenderer";
+import {
+  copyLatexAsEquation,
+  LatexMarkdownRenderer,
+} from "@/components/LatexMarkdownRenderer";
 import { OceanTopicCards } from "@/components/OceanTopicCards";
 import { AuthModal } from "@/components/AuthModal";
 import { useAuth } from "@/context/AuthContext";
@@ -302,7 +305,9 @@ export default function HomePage() {
     const selected = files.slice(0, remaining);
     setIsReadingFiles(true);
     try {
-      const parsed = await Promise.all(selected.map((file) => readLocalFile(file)));
+      const parsed = await Promise.all(
+        selected.map((file) => readLocalFile(file, user?.uid || "guest"))
+      );
       setPendingAttachments((prev) => [...prev, ...parsed].slice(0, MAX_ATTACHMENTS));
       if (files.length > remaining) {
         setFileError(`Hanya ${remaining} berkas tambahan yang diterima.`);
@@ -511,8 +516,13 @@ export default function HomePage() {
     }
   };
 
-  const handleCopyMessage = (id: string, text: string) => {
-    navigator.clipboard.writeText(text);
+  const handleCopyMessage = async (id: string, text: string) => {
+    try {
+      await copyLatexAsEquation(text);
+    } catch (error) {
+      console.error("Gagal menyalin equation:", error);
+      await navigator.clipboard.writeText(text);
+    }
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
   };
@@ -832,12 +842,26 @@ export default function HomePage() {
                           <div className="flex flex-col gap-2 mb-2">
                             {message.attachments.map((att) =>
                               att.kind === "image" && att.dataUrl ? (
-                                <img
-                                  key={att.id}
-                                  src={att.dataUrl}
-                                  alt={att.name}
-                                  className="max-h-48 rounded-lg border border-[#e5e3dc] object-contain bg-white"
-                                />
+                                <div key={att.id} className="relative w-fit">
+                                  <img
+                                    src={att.dataUrl}
+                                    alt={att.name}
+                                    className="max-h-48 rounded-lg border border-[#e5e3dc] object-contain bg-white"
+                                  />
+                                  {att.downloadUrl && (
+                                    <a
+                                      href={att.downloadUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      download={att.name}
+                                      className="absolute bottom-2 right-2 rounded-md bg-white/90 p-1.5 text-stone-600 shadow hover:text-[#c2613a]"
+                                      title="Unduh gambar"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
+                                </div>
                               ) : (
                                 <div
                                   key={att.id}
@@ -852,6 +876,19 @@ export default function HomePage() {
                                   <span className="text-stone-400 shrink-0">
                                     {formatFileSize(att.size)}
                                   </span>
+                                  {att.downloadUrl && (
+                                    <a
+                                      href={att.downloadUrl}
+                                      target="_blank"
+                                      rel="noreferrer"
+                                      download={att.name}
+                                      className="text-stone-500 hover:text-[#c2613a]"
+                                      title="Unduh lampiran"
+                                      onClick={(e) => e.stopPropagation()}
+                                    >
+                                      <Download className="w-3.5 h-3.5" />
+                                    </a>
+                                  )}
                                 </div>
                               )
                             )}
@@ -996,6 +1033,7 @@ export default function HomePage() {
                         <div className="text-[10px] text-stone-400">
                           {formatFileSize(att.size)}
                           {att.extractedText ? " · dibaca" : ""}
+                          {att.storagePath ? " · tersimpan" : ""}
                         </div>
                       </div>
                       <button
@@ -1045,7 +1083,7 @@ export default function HomePage() {
                     onClick={() => fileInputRef.current?.click()}
                     disabled={isStreaming || isReadingFiles || pendingAttachments.length >= MAX_ATTACHMENTS}
                     className="p-1.5 rounded-md text-stone-500 hover:text-stone-800 hover:bg-[#f4f2ec] disabled:opacity-30 cursor-pointer"
-                    title="Unggah file (DOCX, gambar, teks)"
+                    title="Unggah file (PDF, DOCX, gambar, teks)"
                   >
                     {isReadingFiles ? (
                       <Loader2 className="w-4 h-4 animate-spin" />
@@ -1056,7 +1094,7 @@ export default function HomePage() {
                   <span className="text-[11px] text-stone-400 select-none truncate">
                     {isDraggingFiles
                       ? "Lepaskan berkas untuk diunggah"
-                      : "DOCX, gambar, atau teks · maks 8 MB"}
+                      : "PDF, DOCX, gambar, atau teks · maks 8 MB"}
                   </span>
                 </div>
 

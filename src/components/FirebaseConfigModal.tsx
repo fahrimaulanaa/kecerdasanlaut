@@ -32,9 +32,9 @@ export function FirebaseConfigModal({ isOpen, onClose }: FirebaseConfigModalProp
     if (isOpen) {
       const active = getActiveFirebaseConfig();
       if (active) {
-        setConfig(active);
+        queueMicrotask(() => setConfig(active));
       }
-      setStatusMsg(null);
+      queueMicrotask(() => setStatusMsg(null));
     }
   }, [isOpen]);
 

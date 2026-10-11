@@ -95,8 +95,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   };
 
   useEffect(() => {
-    const unsub = initAuth();
-    return () => unsub?.();
+    let cancelled = false;
+    let unsub: (() => void) | undefined;
+    queueMicrotask(() => {
+      if (!cancelled) {
+        unsub = initAuth();
+      }
+    });
+    return () => {
+      cancelled = true;
+      unsub?.();
+    };
   }, []);
 
   const reloadConfig = () => {

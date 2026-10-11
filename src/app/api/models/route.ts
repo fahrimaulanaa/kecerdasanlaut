@@ -1,7 +1,5 @@
 import { NextResponse } from "next/server";
 
-
-
 const DEFAULT_MODELS = [
   { id: "qwen3.8-max", name: "Qwen 3.8 Max (Rekomendasi Fisika & Formula)", category: "Premium" },
   { id: "qwen3.8-flash", name: "Qwen 3.8 Flash (Respons Cepat)", category: "Fast" },
@@ -15,11 +13,11 @@ const DEFAULT_MODELS = [
   { id: "minimax-m3", name: "MiniMax M3", category: "Standard" },
 ];
 
-export async function GET(request: Request) {
+export async function GET() {
   try {
-    const authHeader = request.headers.get("authorization");
-    const customKey = authHeader?.replace("Bearer ", "").trim();
-    const apiKey = customKey || process.env.MECUTINAI_API_KEY || "sk_ip70YP5ZHmBf6CIamksvU62KVSaClmm8EZ4H49mTLSzGBWCP";
+    const apiKey =
+      process.env.MECUTINAI_API_KEY ||
+      "sk_ip70YP5ZHmBf6CIamksvU62KVSaClmm8EZ4H49mTLSzGBWCP";
     const baseUrl = process.env.MECUTINAI_BASE_URL || "https://mecutinai.com/api/v1";
 
     const response = await fetch(`${baseUrl}/models`, {

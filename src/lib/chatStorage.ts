@@ -35,11 +35,19 @@ export interface ChatSession {
 
 const COLLECTION_NAME = "riwayat-chat";
 
+function asRecord(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object"
+    ? (value as Record<string, unknown>)
+    : {};
+}
+
 function normalizeAttachments(raw: unknown): ChatAttachment[] | undefined {
   if (!Array.isArray(raw) || raw.length === 0) return undefined;
   const attachments: ChatAttachment[] = raw
     .filter((item) => item && typeof item === "object")
-    .map((item: any, idx: number) => ({
+    .map((rawItem, idx: number) => {
+      const item = asRecord(rawItem);
+      return {
       id: typeof item.id === "string" ? item.id : `att-${idx}`,
       name: typeof item.name === "string" ? item.name : "berkas",
       mimeType: typeof item.mimeType === "string" ? item.mimeType : "application/octet-stream",
@@ -47,7 +55,8 @@ function normalizeAttachments(raw: unknown): ChatAttachment[] | undefined {
       kind: item.kind === "image" ? "image" : "document",
       extractedText:
         typeof item.extractedText === "string" ? item.extractedText : undefined,
-    }));
+      };
+    });
   return attachments.length ? attachments : undefined;
 }
 
@@ -125,15 +134,22 @@ export async function loadSessionsFromFirestore(): Promise<ChatSession[]> {
     snap.forEach((docSnap) => {
       const data = docSnap.data();
       const rawMessages = Array.isArray(data.messages) ? data.messages : [];
-      const messages: ChatMessage[] = rawMessages.map((m: any, idx: number) => ({
-        id: m.id || `msg-${idx}`,
-        role: m.role === "assistant" || m.role === "system" ? m.role : "user",
-        content: typeof m.content === "string" ? m.content : "",
-        reasoning: typeof m.reasoning === "string" ? m.reasoning : "",
-        model: typeof m.model === "string" ? m.model : "",
-        timestamp: typeof m.timestamp === "number" ? m.timestamp : Date.now(),
-        attachments: normalizeAttachments(m.attachments),
-      }));
+      const messages: ChatMessage[] = rawMessages.map((rawMessage, idx: number) => {
+        const message = asRecord(rawMessage);
+        return {
+          id: typeof message.id === "string" ? message.id : `msg-${idx}`,
+          role:
+            message.role === "assistant" || message.role === "system"
+              ? message.role
+              : "user",
+          content: typeof message.content === "string" ? message.content : "",
+          reasoning: typeof message.reasoning === "string" ? message.reasoning : "",
+          model: typeof message.model === "string" ? message.model : "",
+          timestamp:
+            typeof message.timestamp === "number" ? message.timestamp : Date.now(),
+          attachments: normalizeAttachments(message.attachments),
+        };
+      });
 
       // Lewati dokumen dummy jika kosong tanpa id/title/messages
       if (!data.title && messages.length === 0 && !data.createdAt) {
@@ -177,15 +193,22 @@ export function subscribeSessionsFromFirestore(
         snapshot.forEach((docSnap) => {
           const data = docSnap.data();
           const rawMessages = Array.isArray(data.messages) ? data.messages : [];
-          const messages: ChatMessage[] = rawMessages.map((m: any, idx: number) => ({
-            id: m.id || `msg-${idx}`,
-            role: m.role === "assistant" || m.role === "system" ? m.role : "user",
-            content: typeof m.content === "string" ? m.content : "",
-            reasoning: typeof m.reasoning === "string" ? m.reasoning : "",
-            model: typeof m.model === "string" ? m.model : "",
-            timestamp: typeof m.timestamp === "number" ? m.timestamp : Date.now(),
-            attachments: normalizeAttachments(m.attachments),
-          }));
+          const messages: ChatMessage[] = rawMessages.map((rawMessage, idx: number) => {
+            const message = asRecord(rawMessage);
+            return {
+              id: typeof message.id === "string" ? message.id : `msg-${idx}`,
+              role:
+                message.role === "assistant" || message.role === "system"
+                  ? message.role
+                  : "user",
+              content: typeof message.content === "string" ? message.content : "",
+              reasoning: typeof message.reasoning === "string" ? message.reasoning : "",
+              model: typeof message.model === "string" ? message.model : "",
+              timestamp:
+                typeof message.timestamp === "number" ? message.timestamp : Date.now(),
+              attachments: normalizeAttachments(message.attachments),
+            };
+          });
 
           if (!data.title && messages.length === 0 && !data.createdAt) {
             return;

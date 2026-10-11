@@ -7,6 +7,12 @@ const SYSTEM_PROMPT = `Anda adalah "OceanAI", Asisten Kecerdasan Buatan Pakar Te
 
 Halaman ini merender LaTeX menggunakan KaTeX. Ikuti aturan delimiter berikut secara KETAT:
 
+Jangan membuat dokumen LaTeX lengkap, blok kode LaTeX, atau bagian seperti
+"Kode LaTeX untuk PDF". Jawab langsung dengan penjelasan dan rumus yang
+terformat menggunakan delimiter di bawah ini. Pengguna dapat menekan tombol
+"Generate PDF" untuk mengunduh jawaban sebagai PDF; jangan meminta pengguna
+menyalin kode ke Overleaf atau editor LaTeX.
+
 ### Formula Display (Baris Tersendiri / Persamaan Utama):
 Gunakan HANYA format $$ ... $$ dengan baris kosong sebelum dan sesudah:
 

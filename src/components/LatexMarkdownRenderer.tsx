@@ -13,65 +13,25 @@ interface LatexMarkdownRendererProps {
 }
 
 /**
- * Normalizes and converts raw LaTeX formulas into standard KaTeX markdown.
- * Handles display math, inline math, bare equation lines, and standalone Greek letters.
+ * Safely normalizes LaTeX delimiters without aggressively modifying existing markdown.
+ * Only converts the two unambiguous cases:
+ *   \[ ... \]  →  $$ ... $$   (display math)
+ *   \( ... \)  →  $ ... $     (inline math)
+ *
+ * All other content is left untouched to avoid breaking tables, headings, and paragraphs.
  */
-export function normalizeLatex(rawText: string): string {
-  if (!rawText) return "";
+function normalizeLatex(text: string): string {
+  if (!text) return "";
 
-  let text = rawText;
-
-  // 1. Convert display math \[ ... \] to $$ ... $$
-  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_, math) => `$$\n${math.trim()}\n$$`);
-
-  // 2. Convert inline math \( ... \) to $ ... $
-  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_, math) => `$${math.trim()}$`);
-
-  // 3. Convert bare equation lines without $ into display math $$ ... $$
-  // If a line contains TeX operators like \frac, \nabla, \partial, \sum, \int, \tanh, \sqrt, \dot, \ddot
-  // and does NOT already contain '$' or backticks
-  const lines = text.split("\n");
-  const processedLines = lines.map((line) => {
-    const trimmed = line.trim();
-    if (!trimmed) return line;
-
-    // Skip if already wrapped in $ or code fence
-    if (trimmed.startsWith("$$") || trimmed.startsWith("```") || trimmed.startsWith("|")) {
-      return line;
-    }
-
-    // Check if line contains TeX math commands and is an equation line
-    const hasMathCommand = /\\(frac|nabla|partial|int|sum|prod|tanh|sqrt|dot|ddot|vec|mathbf|boldsymbol|ll|gg|approx|equiv|le|ge|pm|times|cdot|implies|iff)\b/.test(
-      trimmed
-    );
-    const hasEqualsOrRel = /(=|<|>|\+|-|\/|\\approx|\\implies)/.test(trimmed);
-
-    if (hasMathCommand && hasEqualsOrRel && !trimmed.includes("$")) {
-      // Clean any accidental markdown heading prefix if present inside equation
-      return `$$\n${trimmed}\n$$`;
-    }
-
-    return line;
-  });
-  text = processedLines.join("\n");
-
-  // 4. Wrap standalone inline math expressions like \phi(x,z,t), (a/L \ll 1), z = -h, (\rho), (\omega)
-  // First, handle parenthesized expressions containing TeX symbols: e.g. (\rho) or (a/L \ll 1) or (\phi)
-  text = text.replace(/\(([^)$\n]*\\[a-zA-Z]+[^)$\n]*)\)/g, (match, inner) => {
-    // If not already inside math delimiters
-    if (inner.includes("$")) return match;
-    return `($${inner.trim()}$)`;
+  // 1. Display math: \[ ... \]  →  $$ ... $$
+  text = text.replace(/\\\[([\s\S]*?)\\\]/g, (_match, math) => {
+    return `$$\n${math.trim()}\n$$`;
   });
 
-  // Next, wrap standalone Greek letters or symbols like \rho, \omega, \eta, \lambda, \phi, \zeta
-  // that have word boundaries and are not already inside $ or backticks
-  const greekLetters = "alpha|beta|gamma|delta|epsilon|zeta|eta|theta|iota|kappa|lambda|mu|nu|xi|pi|rho|sigma|tau|upsilon|phi|chi|psi|omega|Gamma|Delta|Theta|Lambda|Xi|Pi|Sigma|Phi|Psi|Omega";
-  text = text.replace(new RegExp(`(?<=[\\s,;:(]|^)\\\\(${greekLetters})(?=[\\s,;:.?!)]|$)`, "g"), (match) => {
-    return `$${match}$`;
+  // 2. Inline math: \( ... \)  →  $ ... $
+  text = text.replace(/\\\(([\s\S]*?)\\\)/g, (_match, math) => {
+    return `$${math.trim()}$`;
   });
-
-  // 5. Ensure display math $$ has proper newline spacing
-  text = text.replace(/([^\n])\$\$([\s\S]*?)\$\$([^\n])/g, "$1\n\n$$$2$$\n\n$3");
 
   return text;
 }
@@ -106,11 +66,7 @@ function CodeBlock({
     <div className="claude-code-container">
       <div className="claude-code-header">
         <span className="claude-code-lang">{language || "code"}</span>
-        <button
-          onClick={handleCopy}
-          className="claude-code-copy-btn"
-          title="Salin kode"
-        >
+        <button onClick={handleCopy} className="claude-code-copy-btn" title="Salin kode">
           {copied ? (
             <>
               <Check className="w-3.5 h-3.5 text-emerald-600" />
@@ -147,7 +103,7 @@ export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
               output: "htmlAndMathml",
               strict: false,
               throwOnError: false,
-              errorColor: "#2d2b28",
+              errorColor: "#991b1b",
             },
           ],
         ]}

@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { tmpdir } from "node:os";
 import mammoth from "mammoth";
 import {
   definePDFJSModule,
@@ -15,7 +16,9 @@ const MAX_OCR_PAGES = 20;
 async function extractScannedPdfText(buffer: Buffer): Promise<string> {
   await definePDFJSModule(() => import("pdfjs-dist"));
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
-  const worker = await createWorker(["ind", "eng"]);
+  const worker = await createWorker(["ind", "eng"], undefined, {
+    cachePath: tmpdir(),
+  });
 
   try {
     const pageCount = Math.min(pdf.numPages, MAX_OCR_PAGES);

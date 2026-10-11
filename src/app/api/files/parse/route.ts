@@ -1,7 +1,48 @@
 import { NextResponse } from "next/server";
 import mammoth from "mammoth";
-import { extractText, getDocumentProxy } from "unpdf";
+import {
+  definePDFJSModule,
+  extractText,
+  getDocumentProxy,
+  renderPageAsImage,
+} from "unpdf";
+import { createWorker } from "tesseract.js";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
+
+const MIN_PDF_TEXT_CHARS = 40;
+const MAX_OCR_PAGES = 20;
+
+async function extractScannedPdfText(buffer: Buffer): Promise<string> {
+  await definePDFJSModule(() => import("pdfjs-dist"));
+  const pdf = await getDocumentProxy(new Uint8Array(buffer));
+  const worker = await createWorker(["ind", "eng"]);
+
+  try {
+    const pageCount = Math.min(pdf.numPages, MAX_OCR_PAGES);
+    const pageTexts: string[] = [];
+
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber += 1) {
+      const image = await renderPageAsImage(pdf, pageNumber, {
+        canvasImport: () => import("@napi-rs/canvas"),
+        scale: 1.5,
+      });
+      const result = await worker.recognize(Buffer.from(image));
+      const text = result.data.text.trim();
+      if (text) {
+        pageTexts.push(`--- Halaman ${pageNumber} ---\n${text}`);
+      }
+    }
+
+    if (pdf.numPages > MAX_OCR_PAGES) {
+      pageTexts.push(
+        `[OCR dibatasi hingga ${MAX_OCR_PAGES} halaman pertama dari ${pdf.numPages} halaman.]`
+      );
+    }
+    return pageTexts.join("\n\n");
+  } finally {
+    await worker.terminate();
+  }
+}
 
 export async function POST(request: Request) {
   try {
@@ -31,6 +72,11 @@ export async function POST(request: Request) {
         const pdf = await getDocumentProxy(new Uint8Array(buffer));
         const { text } = await extractText(pdf, { mergePages: true });
         extractedText = text || "";
+
+        if (extractedText.replace(/\s+/g, "").length < MIN_PDF_TEXT_CHARS) {
+          console.info(`PDF ${file.name} tidak memiliki teks bermakna; menjalankan OCR.`);
+          extractedText = await extractScannedPdfText(buffer);
+        }
       } catch (error) {
         console.error("PDF parse error:", error);
         return NextResponse.json(

@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "OceanAI - Asisten AI Mahasiswa Teknik Kelautan",
+  title: "Narwhal Intelligence - Asisten AI Mahasiswa Teknik Kelautan",
   description:
     "Platform AI interaktif terdedikasi untuk mahasiswa Teknik Kelautan (Ocean & Marine Engineering). Penurunan rumus LaTeX, hidrodinamika, bangunan lepas pantai, dan simulasi numerik.",
   keywords: [

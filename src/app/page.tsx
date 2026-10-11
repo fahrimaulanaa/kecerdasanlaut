@@ -531,13 +531,13 @@ export default function HomePage() {
     if (!currentSession) return;
     const lines = [
       `# ${currentSession.title}`,
-      `*Diekspor dari OceanAI - Platform AI Mahasiswa Teknik Kelautan*`,
+      `*Diekspor dari Narwhal Intelligence - Platform AI Mahasiswa Teknik Kelautan*`,
       `*Model: ${currentSession.model} | Tanggal: ${new Date().toLocaleString("id-ID")}*`,
       `\n---\n`,
     ];
 
     currentSession.messages.forEach((m) => {
-      lines.push(`### ${m.role === "user" ? "Mahasiswa" : "OceanAI"}`);
+      lines.push(`### ${m.role === "user" ? "Mahasiswa" : "Narwhal Intelligence"}`);
       if (m.reasoning) {
         lines.push(`> **Proses Berpikir:**\n> ${m.reasoning}\n`);
       }
@@ -572,11 +572,21 @@ export default function HomePage() {
       >
         {/* Sidebar Header */}
         <div className="p-3 pb-2 space-y-2">
+          <div className="flex items-center gap-2 px-1 pb-1">
+            <div className="w-full overflow-hidden rounded-xl bg-white px-2 py-1 shadow-sm">
+              <img
+                src="/logo_ftsl.png"
+                alt="Logo FTSL ITB"
+                className="h-14 w-full object-contain object-left"
+              />
+            </div>
+            <div className="sr-only">
+              <div>AI Kelautan</div>
+              <div>Narwhal Intelligence</div>
+            </div>
+          </div>
           <div className="flex items-center justify-between px-1">
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-sm tracking-tight text-[#1f1e1d]">
-                OceanAI
-              </span>
               <span className="text-[10px] px-1.5 py-0.2 rounded bg-[#e8e5dc] text-stone-600 font-medium">
                 Teknik Kelautan
               </span>

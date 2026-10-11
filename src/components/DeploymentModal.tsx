@@ -58,7 +58,7 @@ export function DeploymentModal({ isOpen, onClose }: DeploymentModalProps) {
                   onClick={() =>
                     copyCode(
                       "git",
-                      `git add .\ngit commit -m "feat: inisialisasi OceanAI platform kelautan"\ngit branch -M main\ngit remote add origin https://github.com/USERNAME-ANDA/kelautan-jaya.git\ngit push -u origin main`
+                      `git add .\ngit commit -m "feat: inisialisasi Narwhal Intelligence"\ngit branch -M main\ngit remote add origin https://github.com/USERNAME-ANDA/kelautan-jaya.git\ngit push -u origin main`
                     )
                   }
                   className="ocean-code-copy-btn"
@@ -69,7 +69,7 @@ export function DeploymentModal({ isOpen, onClose }: DeploymentModalProps) {
               </div>
               <pre className="ocean-code-pre">
 {`git add .
-git commit -m "feat: inisialisasi OceanAI platform kelautan"
+git commit -m "feat: inisialisasi Narwhal Intelligence"
 git branch -M main
 git remote add origin https://github.com/USERNAME-ANDA/kelautan-jaya.git
 git push -u origin main`}

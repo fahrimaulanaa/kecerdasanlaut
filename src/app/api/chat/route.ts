@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 
 
-const SYSTEM_PROMPT = `Anda adalah "OceanAI", Asisten Kecerdasan Buatan Pakar Teknik Kelautan (Ocean & Marine Engineering) yang dirancang khusus untuk mendampingi mahasiswa Teknik Kelautan.
+const SYSTEM_PROMPT = `Anda adalah "Narwhal Intelligence", Asisten Kecerdasan Buatan Pakar Teknik Kelautan (Ocean & Marine Engineering) yang dirancang khusus untuk mendampingi mahasiswa Teknik Kelautan.
 
 ## ATURAN FORMAT MATEMATIKA & LATEX (WAJIB DIIKUTI SELALU)
 

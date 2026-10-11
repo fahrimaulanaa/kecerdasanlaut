@@ -21,6 +21,7 @@ import {
   FileText,
   Image as ImageIcon,
   Loader2,
+  Settings,
 } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
 import {
@@ -70,6 +71,7 @@ export default function HomePage() {
 
   // Modals
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   // Refs
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
@@ -704,7 +706,29 @@ export default function HomePage() {
         </div>
 
         {/* Sidebar Footer */}
-        <div className="p-2 border-t border-[#e8e6df] space-y-1.5">
+        <div className="relative p-2 border-t border-[#e8e6df] space-y-1.5">
+          {isSettingsOpen && (
+            <div className="absolute bottom-full left-2 right-2 mb-2 rounded-xl border border-[#dedbd2] bg-white p-2 shadow-lg z-50">
+              <div className="px-2.5 py-2 border-b border-[#eeeae2]">
+                <div className="text-xs font-semibold text-stone-800">Settings</div>
+                <div className="text-[10px] text-stone-500">
+                  Pengaturan akun dan sesi
+                </div>
+              </div>
+              {user && (
+                <button
+                  onClick={() => {
+                    setIsSettingsOpen(false);
+                    void signOut();
+                  }}
+                  className="mt-1 w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                  <span>Keluar dari akun</span>
+                </button>
+              )}
+            </div>
+          )}
           {/* User Profile Pill */}
           {user ? (
             <div className="flex items-center justify-between px-2.5 py-2 mt-1 rounded-lg bg-[#eae8e1]/70 border border-[#dedbd2] text-xs">
@@ -722,11 +746,12 @@ export default function HomePage() {
                 </div>
               </div>
               <button
-                onClick={() => signOut()}
-                className="p-1 text-stone-400 hover:text-stone-700 rounded cursor-pointer"
-                title="Keluar"
+                onClick={() => setIsSettingsOpen((open) => !open)}
+                className="flex items-center gap-1 rounded-md px-1.5 py-1 text-stone-400 hover:bg-[#dedbd2] hover:text-stone-700 cursor-pointer"
+                title="Settings"
               >
-                <LogOut className="w-3.5 h-3.5" />
+                <Settings className="w-3.5 h-3.5" />
+                <span className="text-[10px]">Settings</span>
               </button>
             </div>
           ) : (

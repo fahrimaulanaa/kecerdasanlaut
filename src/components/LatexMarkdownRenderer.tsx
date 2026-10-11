@@ -1,12 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkMath from "remark-math";
 import rehypeKatex from "rehype-katex";
 import remarkGfm from "remark-gfm";
 import katex from "katex";
-import { Copy, Check } from "lucide-react";
+import html2canvas from "html2canvas";
+import { Copy, Check, ChevronDown, ImageDown } from "lucide-react";
 import "katex/dist/katex.min.css";
 
 interface LatexMarkdownRendererProps {
@@ -221,6 +222,107 @@ function CodeBlock({
   );
 }
 
+function TableWithActions({
+  children,
+  ...props
+}: React.ComponentPropsWithoutRef<"table">) {
+  const tableRef = useRef<HTMLTableElement>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [status, setStatus] = useState<"idle" | "copied" | "exported">("idle");
+
+  const getTableText = () => {
+    if (!tableRef.current) return "";
+    return Array.from(tableRef.current.rows)
+      .map((row) =>
+        Array.from(row.cells)
+          .map((cell) => cell.innerText.replace(/\s+/g, " ").trim())
+          .join("\t")
+      )
+      .join("\n");
+  };
+
+  const handleCopy = async () => {
+    const table = tableRef.current;
+    if (!table) return;
+
+    const rows = Array.from(table.rows);
+    const html = `<table>${rows
+      .map((row) => `<tr>${Array.from(row.cells)
+        .map((cell) => {
+          const tag = cell.tagName.toLowerCase() === "th" ? "th" : "td";
+          return `<${tag}>${cell.innerHTML}</${tag}>`;
+        })
+        .join("")}</tr>`)
+      .join("")}</table>`;
+    const text = getTableText();
+
+    if (navigator.clipboard?.write && typeof ClipboardItem !== "undefined") {
+      await navigator.clipboard.write([
+        new ClipboardItem({
+          "text/html": new Blob([html], { type: "text/html" }),
+          "text/plain": new Blob([text], { type: "text/plain" }),
+        }),
+      ]);
+    } else {
+      await navigator.clipboard.writeText(text);
+    }
+    setStatus("copied");
+    setIsOpen(false);
+    window.setTimeout(() => setStatus("idle"), 2000);
+  };
+
+  const handleExportPng = async () => {
+    const table = tableRef.current;
+    if (!table) return;
+    const canvas = await html2canvas(table, {
+      backgroundColor: "#ffffff",
+      scale: Math.min(window.devicePixelRatio || 1, 2),
+      useCORS: true,
+    });
+    const link = document.createElement("a");
+    link.download = `tabel-${new Date().toISOString().slice(0, 10)}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    setStatus("exported");
+    setIsOpen(false);
+    window.setTimeout(() => setStatus("idle"), 2000);
+  };
+
+  return (
+    <div className="claude-table-container">
+      <div className="claude-table-toolbar">
+        <button
+          type="button"
+          className="claude-table-menu-button"
+          onClick={() => setIsOpen((open) => !open)}
+          aria-expanded={isOpen}
+          title="Aksi tabel"
+        >
+          {status === "copied" ? "Tabel disalin" : status === "exported" ? "PNG dibuat" : "Aksi tabel"}
+          <ChevronDown className="w-3.5 h-3.5" />
+        </button>
+        {isOpen && (
+          <div className="claude-table-menu">
+            <button type="button" onClick={handleCopy}>
+              <Copy className="w-3.5 h-3.5" />
+              Salin tabel
+            </button>
+            <button type="button" onClick={handleExportPng}>
+              <ImageDown className="w-3.5 h-3.5" />
+              Export tabel menjadi PNG
+            </button>
+          </div>
+        )}
+      </div>
+      <div className="claude-table-wrapper">
+        <table ref={tableRef} className="claude-table" {...props}>
+          {children}
+        </table>
+      </div>
+    </div>
+  );
+}
+
 export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
   const [copiedLatex, setCopiedLatex] = useState<string | null>(null);
   const normalized = normalizeLatex(content);
@@ -260,13 +362,7 @@ export function LatexMarkdownRenderer({ content }: LatexMarkdownRendererProps) {
         ]}
         components={{
           code: CodeBlock as unknown as React.FC<React.ComponentPropsWithoutRef<"code">>,
-          table: ({ children, ...props }) => (
-            <div className="claude-table-wrapper">
-              <table className="claude-table" {...props}>
-                {children}
-              </table>
-            </div>
-          ),
+          table: TableWithActions,
           blockquote: ({ children, ...props }) => (
             <blockquote className="claude-blockquote" {...props}>
               {children}

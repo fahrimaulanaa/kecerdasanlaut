@@ -308,8 +308,72 @@ body {
 }
 
 /* Tables */
-.claude-table-wrapper {
+.claude-table-container {
+  position: relative;
   margin: 1rem 0;
+}
+
+.claude-table-toolbar {
+  display: flex;
+  justify-content: flex-end;
+  min-height: 2rem;
+  margin-bottom: -0.5rem;
+  position: relative;
+  z-index: 2;
+}
+
+.claude-table-menu-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.3rem 0.55rem;
+  border: 1px solid var(--claude-border);
+  border-radius: 0.45rem;
+  color: var(--claude-text-secondary);
+  background: #faf9f5;
+  font-size: 0.6875rem;
+  cursor: pointer;
+}
+
+.claude-table-menu-button:hover {
+  color: var(--claude-text-primary);
+  background: #f2f0ea;
+}
+
+.claude-table-menu {
+  position: absolute;
+  top: 2rem;
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  min-width: 11rem;
+  padding: 0.3rem;
+  border: 1px solid var(--claude-border);
+  border-radius: 0.5rem;
+  background: #fff;
+  box-shadow: 0 8px 20px rgba(31, 30, 29, 0.12);
+}
+
+.claude-table-menu button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  border: 0;
+  border-radius: 0.35rem;
+  color: var(--claude-text-primary);
+  background: transparent;
+  text-align: left;
+  font-size: 0.75rem;
+  cursor: pointer;
+}
+
+.claude-table-menu button:hover {
+  background: #f5f3ec;
+}
+
+.claude-table-wrapper {
   overflow-x: auto;
   border-radius: 0.75rem;
   border: 1px solid var(--claude-border);

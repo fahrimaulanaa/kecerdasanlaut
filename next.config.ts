@@ -6,6 +6,16 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js"],
+  // Ensure native Linux binaries, pdf.js worker, and tesseract assets are
+  // traced into the serverless function bundle on Vercel.
+  outputFileTracingIncludes: {
+    "/api/files/parse": [
+      "./node_modules/@napi-rs/canvas*/**",
+      "./node_modules/pdfjs-dist/**",
+      "./node_modules/tesseract.js/**",
+      "./node_modules/tesseract.js-core/**",
+    ],
+  },
   turbopack: {
     rules: {
       "*.css": {

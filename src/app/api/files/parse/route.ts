@@ -10,6 +10,10 @@ import {
 import { createWorker } from "tesseract.js";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
 
+// OCR & native canvas (@napi-rs/canvas) require the full Node.js runtime on Vercel.
+export const runtime = "nodejs";
+export const maxDuration = 60;
+
 const MIN_PDF_TEXT_CHARS = 40;
 const MAX_OCR_PAGES = 20;
 

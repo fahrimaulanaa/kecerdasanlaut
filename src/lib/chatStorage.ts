@@ -2,6 +2,7 @@ import {
   getDb,
   doc,
   setDoc,
+  getDoc,
   deleteDoc,
   getDocs,
   collection,
@@ -36,10 +37,57 @@ export interface ChatSession {
 }
 
 const COLLECTION_NAME = "riwayat-chat";
+const PROFILE_COLLECTION_NAME = "user-profiles";
 
 interface AuthenticatedChatUser {
   uid: string;
   nim: string;
+}
+
+const MAX_SKILLS_CHARS = 100_000;
+
+export async function saveUserSkills(
+  nim: string | null | undefined,
+  skills: string
+): Promise<boolean> {
+  try {
+    const normalizedNim = nim?.trim();
+    if (!normalizedNim) return false;
+
+    const db = getDb();
+    if (!db) return false;
+
+    await setDoc(
+      doc(db, PROFILE_COLLECTION_NAME, normalizedNim),
+      {
+        nim: normalizedNim,
+        skills: skills.trim().slice(0, MAX_SKILLS_CHARS),
+        skillsUpdatedAt: Date.now(),
+      },
+      { merge: true }
+    );
+    return true;
+  } catch (error) {
+    console.error("Gagal menyimpan Skills user:", error);
+    return false;
+  }
+}
+
+export async function loadUserSkills(nim: string | null | undefined): Promise<string> {
+  try {
+    const normalizedNim = nim?.trim();
+    if (!normalizedNim) return "";
+
+    const db = getDb();
+    if (!db) return "";
+
+    const profile = await getDoc(doc(db, PROFILE_COLLECTION_NAME, normalizedNim));
+    const data = profile.data();
+    return typeof data?.skills === "string" ? data.skills : "";
+  } catch (error) {
+    console.error("Gagal memuat Skills user:", error);
+    return "";
+  }
 }
 
 function asRecord(value: unknown): Record<string, unknown> {

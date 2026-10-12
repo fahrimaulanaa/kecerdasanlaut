@@ -22,6 +22,7 @@ import {
   Image as ImageIcon,
   Loader2,
   Settings,
+  Upload,
 } from "lucide-react";
 import { ModelSelector } from "@/components/ModelSelector";
 import {
@@ -36,6 +37,7 @@ import {
   deleteSessionFromFirestore,
   loadSessionsFromFirestore,
   subscribeSessionsFromFirestore,
+  saveUserSkills,
   type ChatMessage,
   type ChatSession,
 } from "@/lib/chatStorage";
@@ -50,6 +52,8 @@ import {
   type ChatAttachment,
 } from "@/lib/fileAttachments";
 
+type ResponseMode = "thinking" | "balanced" | "fast";
+
 export default function HomePage() {
   const { user, loading: authLoading, signOut } = useAuth();
 
@@ -57,6 +61,8 @@ export default function HomePage() {
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [currentSessionId, setCurrentSessionId] = useState<string>("");
   const [selectedModel, setSelectedModel] = useState<string>("qwen3.8-max");
+  const [responseMode, setResponseMode] = useState<ResponseMode>("balanced");
+  const [skillsStatus, setSkillsStatus] = useState<string>("");
   const [input, setInput] = useState<string>("");
   const [isStreaming, setIsStreaming] = useState<boolean>(false);
   const [streamingContent, setStreamingContent] = useState<string>("");
@@ -77,6 +83,7 @@ export default function HomePage() {
   const chatScrollContainerRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const skillsFileInputRef = useRef<HTMLInputElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
@@ -340,6 +347,33 @@ export default function HomePage() {
     setPendingAttachments((prev) => prev.filter((a) => a.id !== id));
   };
 
+  const handleUploadSkills = async (file: File | undefined) => {
+    if (!file || !user) return;
+
+    const extension = file.name.toLowerCase().split(".").pop() || "";
+    if (!["txt", "md", "json"].includes(extension)) {
+      setSkillsStatus("Gunakan file .txt, .md, atau .json.");
+      return;
+    }
+    if (file.size > 200 * 1024) {
+      setSkillsStatus("File Skills maksimal berukuran 200 KB.");
+      return;
+    }
+
+    try {
+      const text = await file.text();
+      if (extension === "json") JSON.parse(text);
+      const saved = await saveUserSkills(user.nim, text);
+      setSkillsStatus(
+        saved ? `Skills ${file.name} berhasil disimpan.` : "Skills gagal disimpan."
+      );
+    } catch {
+      setSkillsStatus("Isi file JSON tidak valid atau file gagal dibaca.");
+    } finally {
+      if (skillsFileInputRef.current) skillsFileInputRef.current.value = "";
+    }
+  };
+
   const handleSendMessage = async (customPrompt?: string) => {
     const attachmentsToSend = customPrompt ? [] : pendingAttachments;
     const promptToSend = buildUserVisibleContent(
@@ -405,6 +439,8 @@ export default function HomePage() {
         body: JSON.stringify({
           messages: contextMessages,
           model: selectedModel,
+          responseMode,
+          nim: user?.nim || "",
           stream: true,
         }),
         signal: controller.signal,
@@ -728,16 +764,39 @@ export default function HomePage() {
                 </div>
               </div>
               {user && (
-                <button
-                  onClick={() => {
-                    setIsSettingsOpen(false);
-                    void signOut();
-                  }}
-                  className="mt-1 w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
-                >
-                  <LogOut className="w-3.5 h-3.5" />
-                  <span>Keluar dari akun</span>
-                </button>
+                <>
+                  <input
+                    ref={skillsFileInputRef}
+                    type="file"
+                    accept=".txt,.md,.json,text/plain,text/markdown,application/json"
+                    className="hidden"
+                    onChange={(event) => {
+                      void handleUploadSkills(event.target.files?.[0]);
+                    }}
+                  />
+                  <button
+                    onClick={() => skillsFileInputRef.current?.click()}
+                    className="mt-1 w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-stone-700 hover:bg-stone-50 transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5" />
+                    <span>Upload Skills</span>
+                  </button>
+                  {skillsStatus && (
+                    <div className="px-2.5 py-1 text-[10px] text-stone-500">
+                      {skillsStatus}
+                    </div>
+                  )}
+                  <button
+                    onClick={() => {
+                      setIsSettingsOpen(false);
+                      void signOut();
+                    }}
+                    className="mt-1 w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-rose-700 hover:bg-rose-50 transition-colors cursor-pointer"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Keluar dari akun</span>
+                  </button>
+                </>
               )}
             </div>
           )}
@@ -1146,6 +1205,24 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex items-center gap-2">
+                  <div className="flex items-center rounded-md border border-[#e8e6df] bg-[#f7f5ef] p-0.5">
+                    {(["thinking", "balanced", "fast"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setResponseMode(mode)}
+                        className={`rounded px-1.5 sm:px-2 py-1 text-[10px] transition-colors cursor-pointer ${
+                          responseMode === mode
+                            ? "bg-white text-stone-800 shadow-xs font-semibold"
+                            : "text-stone-500 hover:text-stone-800"
+                        }`}
+                        title={`Mode ${mode}`}
+                      >
+                        {mode[0].toUpperCase() + mode.slice(1)}
+                      </button>
+                    ))}
+                  </div>
+
                   {/* Single Model Selector with Logos */}
                   <ModelSelector
                     selectedModel={selectedModel}

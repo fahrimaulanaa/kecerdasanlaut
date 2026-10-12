@@ -51,7 +51,7 @@ import {
 } from "@/lib/fileAttachments";
 
 export default function HomePage() {
-  const { user, signOut } = useAuth();
+  const { user, loading: authLoading, signOut } = useAuth();
 
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -83,16 +83,26 @@ export default function HomePage() {
   const [isReadingFiles, setIsReadingFiles] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const sessionsStorageKey = user?.nim
+    ? `oceanai_sessions_${user.nim}`
+    : "oceanai_sessions_guest";
 
   // Load sessions from localStorage & sync from Cloud Firestore
   useEffect(() => {
+    if (authLoading) return;
+
+    queueMicrotask(() => {
+      setSessions([]);
+      setCurrentSessionId("");
+    });
+
     const savedModel = localStorage.getItem("oceanai_selected_model");
     if (savedModel) {
       queueMicrotask(() => setSelectedModel(savedModel));
     }
 
     // 1. Instant local load
-    const savedSessions = localStorage.getItem("oceanai_sessions");
+    const savedSessions = localStorage.getItem(sessionsStorageKey);
     let hasLocal = false;
     if (savedSessions) {
       try {
@@ -110,7 +120,7 @@ export default function HomePage() {
     }
 
     // 2. Sync from Cloud Firestore collection `riwayat-chat`
-    loadSessionsFromFirestore().then((cloudSessions) => {
+    loadSessionsFromFirestore(user?.nim).then((cloudSessions) => {
       if (cloudSessions && cloudSessions.length > 0) {
         setSessions((prev) => {
           const sessionMap = new Map<string, ChatSession>();
@@ -125,7 +135,7 @@ export default function HomePage() {
             (a, b) => (b.updatedAt || 0) - (a.updatedAt || 0)
           );
           try {
-            localStorage.setItem("oceanai_sessions", JSON.stringify(merged));
+            localStorage.setItem(sessionsStorageKey, JSON.stringify(merged));
           } catch {}
           if (merged.length > 0) {
             setCurrentSessionId((curr) => curr || merged[0].id);
@@ -144,12 +154,12 @@ export default function HomePage() {
         };
         setSessions([initialSession]);
         setCurrentSessionId(initialSession.id);
-        saveSessionToFirestore(initialSession, user?.uid);
+        saveSessionToFirestore(initialSession, user);
       }
     });
 
     // 3. Realtime listener for Firestore updates
-    const unsub = subscribeSessionsFromFirestore((cloudSessions) => {
+    const unsub = subscribeSessionsFromFirestore(user?.nim, (cloudSessions) => {
       if (cloudSessions && cloudSessions.length > 0 && !isStreaming) {
         setSessions((prev) => {
           const sessionMap = new Map<string, ChatSession>();
@@ -170,7 +180,7 @@ export default function HomePage() {
     return () => {
       if (unsub) unsub();
     };
-  }, []);
+  }, [authLoading, sessionsStorageKey, user]);
 
   // Save sessions helper (localStorage + Firestore)
   const persistableSession = (session: ChatSession): ChatSession => ({
@@ -185,14 +195,14 @@ export default function HomePage() {
     setSessions(updated);
     try {
       localStorage.setItem(
-        "oceanai_sessions",
+        sessionsStorageKey,
         JSON.stringify(updated.map(persistableSession))
       );
     } catch (e) {
       console.error("Failed to persist sessions", e);
     }
     if (sessionToSync) {
-      saveSessionToFirestore(persistableSession(sessionToSync), user?.uid);
+      saveSessionToFirestore(persistableSession(sessionToSync), user);
     }
   };
 
@@ -247,7 +257,9 @@ export default function HomePage() {
 
   const handleDeleteSession = (sessionId: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    deleteSessionFromFirestore(sessionId);
+    if (user) {
+      deleteSessionFromFirestore(sessionId, user.nim);
+    }
     const filtered = sessions.filter((s) => s.id !== sessionId);
     if (filtered.length === 0) {
       const fresh: ChatSession = {

@@ -9,6 +9,8 @@ import {
   getDocs,
   deleteDoc,
   onSnapshot,
+  query,
+  where,
 } from "firebase/firestore";
 
 export interface FirebaseConfig {
@@ -113,5 +115,7 @@ export {
   getDocs,
   deleteDoc,
   onSnapshot,
+  query,
+  where,
   type Firestore,
 };

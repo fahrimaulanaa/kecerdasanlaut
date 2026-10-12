@@ -6,6 +6,8 @@ import {
   getDocs,
   collection,
   onSnapshot,
+  query,
+  where,
 } from "./firebase";
 import {
   stripAttachmentBinaries,
@@ -34,6 +36,11 @@ export interface ChatSession {
 }
 
 const COLLECTION_NAME = "riwayat-chat";
+
+interface AuthenticatedChatUser {
+  uid: string;
+  nim: string;
+}
 
 function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === "object"
@@ -69,9 +76,12 @@ function normalizeAttachments(raw: unknown): ChatAttachment[] | undefined {
  */
 export async function saveSessionToFirestore(
   session: ChatSession,
-  userId?: string | null
+  user: AuthenticatedChatUser | null | undefined
 ): Promise<boolean> {
   try {
+    if (!user || !user.nim.trim()) return false;
+    const nim = user.nim.trim();
+
     const db = getDb();
     if (!db) {
       console.warn("Firestore belum siap untuk menyimpan sesi.");
@@ -86,7 +96,8 @@ export async function saveSessionToFirestore(
       createdAt: session.createdAt || Date.now(),
       updatedAt: session.updatedAt || Date.now(),
       timestamp: new Date().toISOString(),
-      userId: userId || "guest",
+      userId: user.uid,
+      nim,
       messages: (session.messages || []).map((m) => ({
         id: m.id || `msg-${Date.now()}`,
         role: m.role || "user",
@@ -109,8 +120,13 @@ export async function saveSessionToFirestore(
 /**
  * Menghapus sesi percakapan dari Cloud Firestore
  */
-export async function deleteSessionFromFirestore(sessionId: string): Promise<boolean> {
+export async function deleteSessionFromFirestore(
+  sessionId: string,
+  nim: string | null | undefined
+): Promise<boolean> {
   try {
+    if (!nim?.trim()) return false;
+
     const db = getDb();
     if (!db) return false;
 
@@ -126,12 +142,19 @@ export async function deleteSessionFromFirestore(sessionId: string): Promise<boo
 /**
  * Memuat semua sesi percakapan dari Cloud Firestore
  */
-export async function loadSessionsFromFirestore(): Promise<ChatSession[]> {
+export async function loadSessionsFromFirestore(
+  nim: string | null | undefined
+): Promise<ChatSession[]> {
   try {
+    if (!nim?.trim()) return [];
+
     const db = getDb();
     if (!db) return [];
 
-    const colRef = collection(db, COLLECTION_NAME);
+    const colRef = query(
+      collection(db, COLLECTION_NAME),
+      where("nim", "==", nim.trim())
+    );
     const snap = await getDocs(colRef);
     const sessions: ChatSession[] = [];
 
@@ -183,13 +206,19 @@ export async function loadSessionsFromFirestore(): Promise<ChatSession[]> {
  * Mendengarkan perubahan real-time dari koleksi riwayat-chat
  */
 export function subscribeSessionsFromFirestore(
+  nim: string | null | undefined,
   onUpdate: (sessions: ChatSession[]) => void
 ): (() => void) | null {
   try {
+    if (!nim?.trim()) return null;
+
     const db = getDb();
     if (!db) return null;
 
-    const colRef = collection(db, COLLECTION_NAME);
+    const colRef = query(
+      collection(db, COLLECTION_NAME),
+      where("nim", "==", nim.trim())
+    );
     const unsubscribe = onSnapshot(
       colRef,
       (snapshot) => {

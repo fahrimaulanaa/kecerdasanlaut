@@ -1,24 +1,22 @@
 import { NextResponse } from "next/server";
 import { tmpdir } from "node:os";
 import mammoth from "mammoth";
-import {
-  definePDFJSModule,
-  extractText,
-  getDocumentProxy,
-  renderPageAsImage,
-} from "unpdf";
+import { extractText, getDocumentProxy, renderPageAsImage } from "unpdf";
 import { createWorker } from "tesseract.js";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
 
-// Library OCR & native canvas (@napi-rs/canvas) membutuhkan Node.js runtime
-// dengan durasi lebih lama. Route API default sudah Node.js, jadi cukup atur durasi.
+// OCR & native canvas (@napi-rs/canvas) butuh Node.js runtime dan waktu lebih lama.
 export const maxDuration = 60;
 
 const MIN_PDF_TEXT_CHARS = 40;
 const MAX_OCR_PAGES = 20;
 
 async function extractScannedPdfText(buffer: Buffer): Promise<string> {
-  await definePDFJSModule(() => import("pdfjs-dist"));
+  // Jangan panggil definePDFJSModule(() => import("pdfjs-dist")) di Node.js:
+  // build resmi pdf.js v6 memakai API Node 22+ (mis. Uint8Array#toHex) sehingga
+  // gagal di runtime Vercel dengan "hashOriginal.toHex is not a function".
+  // Biarkan unpdf memakai serverless build-nya (unpdf/pdfjs) yang sudah
+  // menyertakan polyfill untuk Node >= 18.
   const pdf = await getDocumentProxy(new Uint8Array(buffer));
   const worker = await createWorker(["ind", "eng"], undefined, {
     cachePath: tmpdir(),
@@ -75,8 +73,6 @@ export async function POST(request: Request) {
     let extractedText = "";
 
     if (ext === "pdf" || file.type === "application/pdf") {
-      await definePDFJSModule(() => import("pdfjs-dist"));
-
       let standardParseSucceeded = false;
       try {
         const pdf = await getDocumentProxy(new Uint8Array(buffer));

@@ -6,8 +6,8 @@ const nextConfig: NextConfig = {
   cacheComponents: true,
   partialPrefetching: true,
   serverExternalPackages: ["@napi-rs/canvas", "pdfjs-dist", "tesseract.js"],
-  // Ensure native Linux binaries, pdf.js worker, and tesseract assets are
-  // traced into the serverless function bundle on Vercel.
+  // Pastikan biner native Linux (@napi-rs/canvas), font data pdf.js, dan aset
+  // tesseract ikut di-trace ke dalam serverless function di Vercel.
   outputFileTracingIncludes: {
     "/api/files/parse": [
       "./node_modules/@napi-rs/canvas*/**",

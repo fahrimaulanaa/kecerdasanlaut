@@ -75,21 +75,35 @@ export async function POST(request: Request) {
     let extractedText = "";
 
     if (ext === "pdf" || file.type === "application/pdf") {
+      await definePDFJSModule(() => import("pdfjs-dist"));
+
+      let standardParseSucceeded = false;
       try {
         const pdf = await getDocumentProxy(new Uint8Array(buffer));
         const { text } = await extractText(pdf, { mergePages: true });
         extractedText = text || "";
-
-        if (extractedText.replace(/\s+/g, "").length < MIN_PDF_TEXT_CHARS) {
-          console.info(`PDF ${file.name} tidak memiliki teks bermakna; menjalankan OCR.`);
-          extractedText = await extractScannedPdfText(buffer);
-        }
+        standardParseSucceeded = true;
       } catch (error) {
-        console.error("PDF parse error:", error);
-        return NextResponse.json(
-          { error: `Gagal membaca isi PDF ${file.name}. Pastikan file valid.` },
-          { status: 422 }
-        );
+        console.warn("PDF text extraction failed; trying OCR:", error);
+      }
+
+      if (
+        !standardParseSucceeded ||
+        extractedText.replace(/\s+/g, "").length < MIN_PDF_TEXT_CHARS
+      ) {
+        console.info(`PDF ${file.name} membutuhkan OCR.`);
+        try {
+          extractedText = await extractScannedPdfText(buffer);
+        } catch (error) {
+          console.error("PDF OCR error:", error);
+          return NextResponse.json(
+            {
+              error:
+                `Gagal membaca isi PDF ${file.name}. Parser teks dan OCR tidak berhasil.`,
+            },
+            { status: 422 }
+          );
+        }
       }
     } else if (ext === "doc") {
       return NextResponse.json(

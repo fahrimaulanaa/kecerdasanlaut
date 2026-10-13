@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { tmpdir } from "node:os";
 import mammoth from "mammoth";
+import JSZip from "jszip";
 import { extractText, getDocumentProxy, renderPageAsImage } from "unpdf";
 import { createWorker } from "tesseract.js";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
@@ -47,6 +48,68 @@ async function extractScannedPdfText(buffer: Buffer): Promise<string> {
   } finally {
     await worker.terminate();
   }
+}
+
+const PPTX_SLIDE_PATTERN = /^ppt\/slides\/slide(\d+)\.xml$/;
+const PPTX_NOTES_PATTERN = /^ppt\/notesSlides\/notesSlide(\d+)\.xml$/;
+
+function xmlToPlainText(xml: string): string {
+  return xml
+    .replace(/<a:br\s*\/?>/g, "\n")
+    .replace(/<\/a:p>/g, "\n")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&amp;/g, "&")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/[ \t]+/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+/**
+ * Mengekstrak teks dari presentasi .pptx (Office Open XML) dengan membaca
+ * arsip ZIP dan mengambil teks dari setiap slide serta catatan presentasi.
+ */
+async function extractPptxText(buffer: Buffer): Promise<string> {
+  const zip = await JSZip.loadAsync(buffer);
+  const slideFiles = Object.keys(zip.files)
+    .map((name) => {
+      const match = name.match(PPTX_SLIDE_PATTERN);
+      return match ? { name, index: Number(match[1]) } : null;
+    })
+    .filter((item): item is { name: string; index: number } => item !== null)
+    .sort((a, b) => a.index - b.index);
+
+  if (!slideFiles.length) return "";
+
+  const notesByIndex = new Map<number, string>();
+  const notesFiles = Object.keys(zip.files)
+    .map((name) => {
+      const match = name.match(PPTX_NOTES_PATTERN);
+      return match ? { name, index: Number(match[1]) } : null;
+    })
+    .filter((item): item is { name: string; index: number } => item !== null);
+
+  for (const note of notesFiles) {
+    const xml = await zip.files[note.name].async("string");
+    const text = xmlToPlainText(xml);
+    if (text) notesByIndex.set(note.index, text);
+  }
+
+  const sections: string[] = [];
+  for (const slide of slideFiles) {
+    const xml = await zip.files[slide.name].async("string");
+    const text = xmlToPlainText(xml);
+    if (!text) continue;
+    const note = notesByIndex.get(slide.index);
+    sections.push(
+      `--- Slide ${slide.index} ---\n${text}${note ? `\n[Catatan] ${note}` : ""}`
+    );
+  }
+
+  return sections.join("\n\n");
 }
 
 export async function POST(request: Request) {
@@ -112,6 +175,29 @@ export async function POST(request: Request) {
     } else if (ext === "docx") {
       const result = await mammoth.extractRawText({ buffer });
       extractedText = result.value || "";
+    } else if (ext === "pptx") {
+      try {
+        extractedText = await extractPptxText(buffer);
+      } catch (error) {
+        console.warn("PPTX text extraction failed:", error);
+      }
+      if (!extractedText.trim()) {
+        return NextResponse.json(
+          {
+            error:
+              `Tidak ada teks yang dapat dibaca dari ${file.name}. Pastikan presentasi berisi teks, bukan hanya gambar.`,
+          },
+          { status: 422 }
+        );
+      }
+    } else if (ext === "ppt") {
+      return NextResponse.json(
+        {
+          error:
+            "Format .ppt lama tidak didukung. Simpan ulang sebagai .pptx lalu unggah kembali.",
+        },
+        { status: 400 }
+      );
     } else {
       extractedText = buffer.toString("utf8");
     }

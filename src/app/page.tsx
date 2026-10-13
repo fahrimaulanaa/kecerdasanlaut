@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 import {
   Plus,
   Trash2,
@@ -56,6 +57,7 @@ type ResponseMode = "thinking" | "balanced" | "fast";
 
 export default function HomePage() {
   const { user, loading: authLoading, signOut } = useAuth();
+  const router = useRouter();
 
   // State
   const [sessions, setSessions] = useState<ChatSession[]>([]);
@@ -763,6 +765,16 @@ export default function HomePage() {
                   Pengaturan akun dan sesi
                 </div>
               </div>
+              <button
+                onClick={() => {
+                  setIsSettingsOpen(false);
+                  router.push("/training");
+                }}
+                className="mt-1 w-full flex items-center gap-2 rounded-lg px-2.5 py-2 text-xs text-stone-700 hover:bg-stone-50 transition-colors cursor-pointer"
+              >
+                <Brain className="w-3.5 h-3.5" />
+                <span>Train AI</span>
+              </button>
               {user && (
                 <>
                   <input

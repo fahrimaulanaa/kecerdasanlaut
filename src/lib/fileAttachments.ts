@@ -21,6 +21,8 @@ export const ACCEPT_FILE_TYPES = [
   ".pdf",
   ".doc",
   ".docx",
+  ".ppt",
+  ".pptx",
   ".txt",
   ".md",
   ".csv",
@@ -103,6 +105,14 @@ export function isPdfFile(file: File): boolean {
   return file.type === "application/pdf" || fileExtension(file.name) === "pdf";
 }
 
+export function isPptxFile(file: File): boolean {
+  return (
+    file.type ===
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation" ||
+    fileExtension(file.name) === "pptx"
+  );
+}
+
 export function needsServerParse(file: File): boolean {
   const ext = fileExtension(file.name);
   return (
@@ -111,7 +121,9 @@ export function needsServerParse(file: File): boolean {
     ext === "docx" ||
     file.type === "application/msword" ||
     ext === "doc" ||
-    isPdfFile(file)
+    isPdfFile(file) ||
+    isPptxFile(file) ||
+    ext === "ppt"
   );
 }
 

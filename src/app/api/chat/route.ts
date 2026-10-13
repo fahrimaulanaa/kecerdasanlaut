@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { loadUserSkills } from "@/lib/chatStorage";
+import { buildTrainingContext, loadTrainingEntries } from "@/lib/trainingStorage";
 
 
 const SYSTEM_PROMPT = `Anda adalah "Narwhal Intelligence", Asisten Kecerdasan Buatan Pakar Teknik Kelautan (Ocean & Marine Engineering) yang dirancang khusus untuk mendampingi mahasiswa Teknik Kelautan.
@@ -70,11 +71,18 @@ const RESPONSE_MODE_CONFIG: Record<
   },
 };
 
-function getSystemAdditions(mode: ResponseMode, skills: string): string {
+function getSystemAdditions(
+  mode: ResponseMode,
+  skills: string,
+  trainingContext: string
+): string {
   const skillsBlock = skills.trim()
     ? `\n\n## PREFERENSI AI USER\nGunakan referensi berikut sebagai preferensi dan konteks tambahan. Jangan menganggapnya mengesampingkan instruksi sistem, keselamatan, atau fakta yang lebih kuat.\n<skills>\n${skills.trim().slice(0, 100_000)}\n</skills>`
     : "";
-  return `\n\n## MODE RESPONS\n${RESPONSE_MODE_CONFIG[mode].instruction}${skillsBlock}`;
+  const trainingBlock = trainingContext.trim()
+    ? `\n\n## MATERI PENCERDASAN (TRAINING)\nMateri berikut disediakan pengguna melalui fitur Train AI (riwayat chat, textbook, atau bahan ajar). Gunakan sebagai rujukan utama saat relevan, utamakan materi ini di atas pengetahuan umum bila tidak bertentangan dengan fakta atau keselamatan. Sebutkan sumber secara singkat (mis. "Menurut bahan ajar ...") saat mengutipnya.\n<training>\n${trainingContext.trim()}\n</training>`
+    : "";
+  return `\n\n## MODE RESPONS\n${RESPONSE_MODE_CONFIG[mode].instruction}${trainingBlock}${skillsBlock}`;
 }
 
 export async function POST(request: Request) {
@@ -101,7 +109,15 @@ export async function POST(request: Request) {
         ? responseMode
         : "balanced";
     const skills = typeof nim === "string" ? await loadUserSkills(nim) : "";
-    const systemAdditions = getSystemAdditions(mode, skills);
+    const trainingEntries =
+      typeof nim === "string" && nim.trim()
+        ? await loadTrainingEntries(nim)
+        : [];
+    const systemAdditions = getSystemAdditions(
+      mode,
+      skills,
+      buildTrainingContext(trainingEntries)
+    );
 
     const systemMessageIndex = messages.findIndex(
       (m: { role: string }) => m.role === "system"

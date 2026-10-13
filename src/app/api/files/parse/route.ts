@@ -148,26 +148,29 @@ export async function POST(request: Request) {
 
       const textIsTooShort =
         extractedText.replace(/\s+/g, "").length < MIN_PDF_TEXT_CHARS;
-      console.info(
-        `PDF ${file.name} diproses dengan OCR halaman untuk membaca teks dan visual.`
-      );
-      try {
-        const ocrText = await extractScannedPdfText(buffer);
-        if (ocrText.trim()) {
-          extractedText = extractedText.trim()
-            ? `${extractedText.trim()}\n\n--- Teks dari visual PDF ---\n${ocrText}`
-            : ocrText;
-        }
-      } catch (error) {
-        console.error("PDF OCR error:", error);
-        if (!standardParseSucceeded || textIsTooShort) {
-          return NextResponse.json(
-            {
-              error:
-                `Gagal membaca isi PDF ${file.name}. Parser teks dan OCR tidak berhasil.`,
-            },
-            { status: 422 }
-          );
+
+      // OCR hanya dijalankan bila lapisan teks PDF tidak memadai (mis. PDF
+      // hasil pindai). Ini mencegah timeout dan proses lambat pada PDF teks
+      // besar yang sudah punya teks asli.
+      if (textIsTooShort) {
+        try {
+          const ocrText = await extractScannedPdfText(buffer);
+          if (ocrText.trim()) {
+            extractedText = extractedText.trim()
+              ? `${extractedText.trim()}\n\n--- Teks dari visual PDF ---\n${ocrText}`
+              : ocrText;
+          }
+        } catch (error) {
+          console.error("PDF OCR error:", error);
+          if (!standardParseSucceeded || textIsTooShort) {
+            return NextResponse.json(
+              {
+                error:
+                  `Gagal membaca isi PDF ${file.name}. Parser teks dan OCR tidak berhasil.`,
+              },
+              { status: 422 }
+            );
+          }
         }
       }
     } else if (ext === "doc") {

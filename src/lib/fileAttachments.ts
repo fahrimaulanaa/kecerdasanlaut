@@ -1,3 +1,8 @@
+import {
+  extractPdfTextInBrowser,
+  shouldParsePdfInBrowser,
+} from "./clientPdfParser";
+
 export type ChatAttachmentKind = "image" | "document";
 
 export interface ChatAttachment {
@@ -16,6 +21,15 @@ export interface ChatAttachment {
 export const MAX_ATTACHMENTS = 5;
 export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 export const MAX_EXTRACTED_CHARS = 80_000;
+
+/**
+ * Batas aman payload untuk fungsi serverless Vercel (limit keras 4.5 MB).
+ * Berkas di atas batas ini tidak boleh dikirim ke /api/files/parse karena
+ * akan ditolak platform dengan 413 FUNCTION_PAYLOAD_TOO_LARGE sebelum handler
+ * dijalankan.
+ */
+export const MAX_SERVER_PARSE_BYTES = 4 * 1024 * 1024;
+
 
 export const ACCEPT_FILE_TYPES = [
   ".pdf",
@@ -201,6 +215,13 @@ async function compressImage(file: File): Promise<{ dataUrl: string; mimeType: s
 }
 
 async function parseOnServer(file: File): Promise<ChatAttachment> {
+  if (file.size > MAX_SERVER_PARSE_BYTES) {
+    throw new Error(
+      `${file.name} berukuran ${formatFileSize(file.size)}. Unggahan ke server dibatasi ${formatFileSize(
+        MAX_SERVER_PARSE_BYTES
+      )} per berkas. Kompres atau pisahkan berkas menjadi beberapa bagian.`
+    );
+  }
   const form = new FormData();
   form.append("file", file);
   const res = await fetch("/api/files/parse", {
@@ -259,6 +280,27 @@ export async function readLocalFile(
       kind: "image",
       ...stored,
       dataUrl: compressed.dataUrl,
+    };
+  }
+
+  if (isPdfFile(file) && shouldParsePdfInBrowser(file.size)) {
+    // PDF besar (textbook ratusan/ribuan halaman) diproses di browser agar
+    // tidak melewati batas payload serverless Vercel (error 413).
+    const { totalPages, text } = await extractPdfTextInBrowser(file);
+    const extracted = truncateExtractedText(text);
+    if (!extracted) {
+      throw new Error(
+        `Tidak ada teks yang dapat dibaca dari ${file.name}. PDF kemungkinan berupa hasil pindai; unggah versi dengan teks atau berkas yang lebih kecil.`
+      );
+    }
+    const note = `[Diproses di browser: ${totalPages.toLocaleString("id-ID")} halaman]`;
+    return {
+      id: "att-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8),
+      name: file.name,
+      mimeType: file.type || "application/pdf",
+      size: file.size,
+      kind: "document",
+      extractedText: `${note}\n${extracted}`,
     };
   }
 

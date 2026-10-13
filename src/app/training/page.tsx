@@ -27,6 +27,7 @@ import {
   type TrainingEntry,
   type TrainingSourceType,
 } from "@/lib/trainingStorage";
+import { loadSessionsFromFirestore, type ChatSession } from "@/lib/chatStorage";
 import {
   readLocalFile,
   type ChatAttachment,
@@ -53,7 +54,7 @@ const METHOD_OPTIONS: MethodOption[] = [
     icon: <History className="w-5 h-5" />,
     accept: ".txt,.md,.json,text/plain,text/markdown,application/json",
     multiple: true,
-    hint: "Unggah ekspor riwayat chat (.txt, .md, atau .json).",
+    hint: "Riwayat chat tersimpan akan dipelajari langsung dari database.",
   },
   {
     id: "textbook",
@@ -63,7 +64,7 @@ const METHOD_OPTIONS: MethodOption[] = [
     icon: <BookOpen className="w-5 h-5" />,
     accept: ".pdf,.docx,.txt,.md",
     multiple: true,
-    hint: "Mendukung PDF dan DOCX (maks. 8 MB per berkas).",
+    hint: "Mendukung PDF dan DOCX (maks. 50 MB per berkas).",
   },
   {
     id: "teaching-material",
@@ -73,7 +74,7 @@ const METHOD_OPTIONS: MethodOption[] = [
     icon: <Presentation className="w-5 h-5" />,
     accept: ".pptx,.pdf,.docx",
     multiple: true,
-    hint: "Mendukung PPTX dan PDF (maks. 8 MB per berkas).",
+    hint: "Mendukung PPTX dan PDF (maks. 50 MB per berkas).",
   },
 ];
 
@@ -109,6 +110,30 @@ export default function TrainingPage() {
     [activeMethod]
   );
 
+  const createTrainingEntryFromSession = (
+    session: ChatSession
+  ): TrainingEntry | null => {
+    const content = sanitizeTrainingContent(
+      session.messages
+        .filter((message) => message.role === "user" || message.role === "assistant")
+        .map(
+          (message) =>
+            `${message.role === "user" ? "Pengguna" : "AI"}: ${message.content}`
+        )
+        .join("\n\n")
+    );
+    if (!content) return null;
+
+    return {
+      id: `chat-history-${session.id}`,
+      sourceType: "chat-history",
+      title: session.title || "Riwayat Chat",
+      content,
+      createdAt: session.createdAt,
+      updatedAt: session.updatedAt,
+    };
+  };
+
   // Muat + sinkronkan entri training milik user.
   useEffect(() => {
     if (authLoading) return;
@@ -133,6 +158,46 @@ export default function TrainingPage() {
     };
   }, [authLoading, user?.nim]);
 
+  useEffect(() => {
+    if (authLoading || !user?.nim || activeMethod !== "chat-history") return;
+
+    let isMounted = true;
+    const syncChatHistory = async () => {
+      setIsProcessing(true);
+      setError(null);
+      try {
+        const sessions = await loadSessionsFromFirestore(user.nim);
+        const entries = sessions
+          .map((session) => createTrainingEntryFromSession(session))
+          .filter((entry): entry is TrainingEntry => entry !== null);
+
+        await Promise.all(entries.map((entry) => saveTrainingEntry(user.nim, entry)));
+        if (isMounted) {
+          setStatus(
+            entries.length
+              ? `${entries.length} riwayat chat sudah dipelajari dari database.`
+              : "Belum ada riwayat chat tersimpan untuk dipelajari."
+          );
+        }
+      } catch (err) {
+        if (isMounted) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Gagal mempelajari riwayat chat dari database."
+          );
+        }
+      } finally {
+        if (isMounted) setIsProcessing(false);
+      }
+    };
+
+    void syncChatHistory();
+    return () => {
+      isMounted = false;
+    };
+  }, [activeMethod, authLoading, user?.nim]);
+
   const resetFiles = () => {
     if (fileInputRef.current) fileInputRef.current.value = "";
   };
@@ -153,6 +218,7 @@ export default function TrainingPage() {
       createdAt: Date.now(),
       updatedAt: Date.now(),
     };
+
   };
 
   const handleSelectFiles = async (fileList: FileList | null) => {
@@ -164,6 +230,7 @@ export default function TrainingPage() {
     setIsProcessing(true);
 
     try {
+      if (activeMethod === "chat-history") return;
       const files = Array.from(fileList);
       const attachments = await Promise.all(
         files.map((file) => readLocalFile(file, user?.uid || "guest"))
@@ -316,19 +383,21 @@ export default function TrainingPage() {
               </h2>
               <p className="text-[11px] text-stone-500">{activeOption.hint}</p>
             </div>
-            <button
-              type="button"
-              disabled={isProcessing || !hasAccess}
-              onClick={() => fileInputRef.current?.click()}
-              className="flex items-center gap-2 rounded-lg bg-[#c2613a] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#b0532f] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
-            >
-              {isProcessing ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <Upload className="w-4 h-4" />
-              )}
-              <span>{isProcessing ? "Memproses..." : "Pilih Berkas"}</span>
-            </button>
+            {activeMethod !== "chat-history" && (
+              <button
+                type="button"
+                disabled={isProcessing || !hasAccess}
+                onClick={() => fileInputRef.current?.click()}
+                className="flex items-center gap-2 rounded-lg bg-[#c2613a] px-3 py-2 text-xs font-medium text-white transition-colors hover:bg-[#b0532f] disabled:opacity-40 cursor-pointer disabled:cursor-not-allowed"
+              >
+                {isProcessing ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <Upload className="w-4 h-4" />
+                )}
+                <span>{isProcessing ? "Memproses..." : "Pilih Berkas"}</span>
+              </button>
+            )}
             <input
               ref={fileInputRef}
               type="file"

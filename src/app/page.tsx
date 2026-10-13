@@ -55,6 +55,12 @@ import {
 
 type ResponseMode = "thinking" | "balanced" | "fast";
 
+interface UsageSummary {
+  usedTokens?: number;
+  remainingTokens?: number;
+  limitTokens?: number;
+}
+
 export default function HomePage() {
   const { user, loading: authLoading, signOut } = useAuth();
   const router = useRouter();
@@ -91,6 +97,7 @@ export default function HomePage() {
   const [pendingAttachments, setPendingAttachments] = useState<ChatAttachment[]>([]);
   const [isReadingFiles, setIsReadingFiles] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
+  const [usage, setUsage] = useState<UsageSummary | null>(null);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const sessionsStorageKey = user?.nim
     ? `oceanai_sessions_${user.nim}`
@@ -464,6 +471,14 @@ export default function HomePage() {
       let fullContent = "";
       let fullReasoning = "";
       let buffer = "";
+      const remainingHeader = res.headers.get("x-usage-remaining-tokens");
+      const limitHeader = res.headers.get("x-usage-limit-tokens");
+      if (remainingHeader || limitHeader) {
+        setUsage({
+          remainingTokens: remainingHeader ? Number(remainingHeader) : undefined,
+          limitTokens: limitHeader ? Number(limitHeader) : undefined,
+        });
+      }
 
       while (true) {
         const { value, done } = await reader.read();
@@ -482,6 +497,21 @@ export default function HomePage() {
 
           try {
             const parsed = JSON.parse(dataStr);
+            const responseUsage = parsed.usage;
+            if (responseUsage && typeof responseUsage === "object") {
+              const remainingTokens =
+                responseUsage.remaining_tokens ?? responseUsage.remainingTokens;
+              const usedTokens =
+                responseUsage.total_tokens ?? responseUsage.totalTokens;
+              const limitTokens =
+                responseUsage.limit_tokens ?? responseUsage.limitTokens;
+              setUsage({
+                usedTokens: typeof usedTokens === "number" ? usedTokens : undefined,
+                remainingTokens:
+                  typeof remainingTokens === "number" ? remainingTokens : undefined,
+                limitTokens: typeof limitTokens === "number" ? limitTokens : undefined,
+              });
+            }
             const delta = parsed.choices?.[0]?.delta;
             if (delta) {
               if (delta.content) {
@@ -909,6 +939,22 @@ export default function HomePage() {
 
           {/* Header Actions */}
           <div className="flex items-center gap-1.5">
+            {usage && (
+              <div
+                className="hidden sm:block rounded-md border border-[#e8e6df] bg-white px-2 py-1 text-[10px] text-stone-500"
+                title="Usage token dari endpoint AI"
+              >
+                Usage:{" "}
+                {typeof usage.remainingTokens === "number"
+                  ? `${usage.remainingTokens.toLocaleString("id-ID")} tersisa`
+                  : typeof usage.usedTokens === "number"
+                    ? `${usage.usedTokens.toLocaleString("id-ID")} terpakai`
+                    : "belum tersedia"}
+                {typeof usage.limitTokens === "number"
+                  ? ` / ${usage.limitTokens.toLocaleString("id-ID")}`
+                  : ""}
+              </div>
+            )}
             <button
               onClick={handleExportMarkdown}
               disabled={!currentSession || currentSession.messages.length === 0}
@@ -1212,7 +1258,7 @@ export default function HomePage() {
                   <span className="text-[11px] text-stone-400 select-none truncate">
                     {isDraggingFiles
                       ? "Lepaskan berkas untuk diunggah"
-                      : "PDF, DOCX, gambar, atau teks · maks 8 MB"}
+                      : "PDF, DOCX, gambar, atau teks · maks 50 MB"}
                   </span>
                 </div>
 

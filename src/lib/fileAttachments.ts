@@ -14,7 +14,7 @@ export interface ChatAttachment {
 }
 
 export const MAX_ATTACHMENTS = 5;
-export const MAX_FILE_BYTES = 8 * 1024 * 1024;
+export const MAX_FILE_BYTES = 50 * 1024 * 1024;
 export const MAX_EXTRACTED_CHARS = 80_000;
 
 export const ACCEPT_FILE_TYPES = [
@@ -245,7 +245,7 @@ export async function readLocalFile(
   userId = "guest"
 ): Promise<ChatAttachment> {
   if (file.size > MAX_FILE_BYTES) {
-    throw new Error(`${file.name} melebihi batas 8 MB.`);
+    throw new Error(`${file.name} melebihi batas 50 MB.`);
   }
 
   if (isImageFile(file)) {

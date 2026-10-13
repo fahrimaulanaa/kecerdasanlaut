@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { loadUserSkills } from "@/lib/chatStorage";
+import { loadSessionsFromFirestore, loadUserSkills } from "@/lib/chatStorage";
 import { buildTrainingContext, loadTrainingEntries } from "@/lib/trainingStorage";
 
 
@@ -85,6 +85,32 @@ function getSystemAdditions(
   return `\n\n## MODE RESPONS\n${RESPONSE_MODE_CONFIG[mode].instruction}${trainingBlock}${skillsBlock}`;
 }
 
+function buildChatHistoryContext(
+  sessions: Awaited<ReturnType<typeof loadSessionsFromFirestore>>
+): string {
+  const sections: string[] = [];
+  let remaining = 60_000;
+
+  for (const session of sessions) {
+    if (remaining <= 0) break;
+    const conversation = session.messages
+      .filter((message) => message.role === "user" || message.role === "assistant")
+      .map(
+        (message) =>
+          `${message.role === "user" ? "Pengguna" : "AI"}: ${message.content}`
+      )
+      .join("\n\n")
+      .trim();
+    if (!conversation) continue;
+
+    const section = `--- Riwayat Chat: ${session.title} ---\n${conversation}`;
+    sections.push(section.slice(0, remaining));
+    remaining -= section.length;
+  }
+
+  return sections.join("\n\n");
+}
+
 export async function POST(request: Request) {
   try {
     const authHeader = request.headers.get("authorization");
@@ -113,10 +139,16 @@ export async function POST(request: Request) {
       typeof nim === "string" && nim.trim()
         ? await loadTrainingEntries(nim)
         : [];
+    const chatHistory =
+      typeof nim === "string" && nim.trim()
+        ? buildChatHistoryContext(await loadSessionsFromFirestore(nim))
+        : "";
     const systemAdditions = getSystemAdditions(
       mode,
       skills,
-      buildTrainingContext(trainingEntries)
+      [buildTrainingContext(trainingEntries), chatHistory]
+        .filter(Boolean)
+        .join("\n\n")
     );
 
     const systemMessageIndex = messages.findIndex(
@@ -159,12 +191,25 @@ export async function POST(request: Request) {
     }
 
     if (stream && mecutinaiResponse.body) {
+      const responseHeaders = new Headers({
+        "Content-Type": "text/event-stream; charset=utf-8",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
+      });
+      const remainingTokens =
+        mecutinaiResponse.headers.get("x-ratelimit-remaining-tokens") ||
+        mecutinaiResponse.headers.get("x-usage-remaining-tokens");
+      const limitTokens =
+        mecutinaiResponse.headers.get("x-ratelimit-limit-tokens") ||
+        mecutinaiResponse.headers.get("x-usage-limit-tokens");
+      if (remainingTokens) {
+        responseHeaders.set("x-usage-remaining-tokens", remainingTokens);
+      }
+      if (limitTokens) {
+        responseHeaders.set("x-usage-limit-tokens", limitTokens);
+      }
       return new Response(mecutinaiResponse.body, {
-        headers: {
-          "Content-Type": "text/event-stream; charset=utf-8",
-          "Cache-Control": "no-cache, no-transform",
-          Connection: "keep-alive",
-        },
+        headers: responseHeaders,
       });
     }
 

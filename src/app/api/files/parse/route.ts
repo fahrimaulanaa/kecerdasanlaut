@@ -7,7 +7,7 @@ import { createWorker } from "tesseract.js";
 import { MAX_FILE_BYTES, truncateExtractedText } from "@/lib/fileAttachments";
 
 // OCR & native canvas (@napi-rs/canvas) butuh Node.js runtime dan waktu lebih lama.
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const MIN_PDF_TEXT_CHARS = 40;
 const MAX_OCR_PAGES = 20;
@@ -126,7 +126,7 @@ export async function POST(request: Request) {
 
     if (file.size > MAX_FILE_BYTES) {
       return NextResponse.json(
-        { error: `${file.name} melebihi batas 8 MB.` },
+        { error: `${file.name} melebihi batas 50 MB.` },
         { status: 400 }
       );
     }
@@ -146,15 +146,21 @@ export async function POST(request: Request) {
         console.warn("PDF text extraction failed; trying OCR:", error);
       }
 
-      if (
-        !standardParseSucceeded ||
-        extractedText.replace(/\s+/g, "").length < MIN_PDF_TEXT_CHARS
-      ) {
-        console.info(`PDF ${file.name} membutuhkan OCR.`);
-        try {
-          extractedText = await extractScannedPdfText(buffer);
-        } catch (error) {
-          console.error("PDF OCR error:", error);
+      const textIsTooShort =
+        extractedText.replace(/\s+/g, "").length < MIN_PDF_TEXT_CHARS;
+      console.info(
+        `PDF ${file.name} diproses dengan OCR halaman untuk membaca teks dan visual.`
+      );
+      try {
+        const ocrText = await extractScannedPdfText(buffer);
+        if (ocrText.trim()) {
+          extractedText = extractedText.trim()
+            ? `${extractedText.trim()}\n\n--- Teks dari visual PDF ---\n${ocrText}`
+            : ocrText;
+        }
+      } catch (error) {
+        console.error("PDF OCR error:", error);
+        if (!standardParseSucceeded || textIsTooShort) {
           return NextResponse.json(
             {
               error:

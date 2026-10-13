@@ -21,7 +21,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Berkas tidak ditemukan." }, { status: 400 });
     }
     if (file.size > MAX_FILE_BYTES) {
-      return NextResponse.json({ error: `${file.name} melebihi batas 8 MB.` }, { status: 400 });
+      return NextResponse.json({ error: `${file.name} melebihi batas 50 MB.` }, { status: 400 });
     }
     if (!ALLOWED_TYPES.has(file.type)) {
       return NextResponse.json({ error: "Hanya PDF dan gambar yang dapat disimpan." }, { status: 415 });
